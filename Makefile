@@ -1,4 +1,4 @@
-# WinixOS Bootloader Makefile
+# WinixOS Makefile
 # Toolchain: Clang (ELF output) + LLD (ELF linker)
 # MSYS2 GNU as/ld only supports PE/COFF; Clang -target generates ELF
 
@@ -10,6 +10,7 @@ QEMU    := qemu-system-x86_64
 BUILD   := build
 BOOT    := boot
 KERNEL  := kernel
+LIB     := kernel/lib
 
 # Assembly flags: -target produces ELF, not PE
 AS16FLAGS := -target i386-unknown-linux-gnu -ffreestanding -nostdinc -c
@@ -20,28 +21,49 @@ CFLAGS := -target x86_64-unknown-linux-gnu \
           -ffreestanding -fno-stack-protector \
           -fno-pic -mno-red-zone \
           -nostdlib -nostdinc \
-          -I include -I . \
+          -I include -I . -I kernel \
           -O2 -Wall -Wextra -Wno-unused-parameter \
           -c
 
+# Kernel C sources
 KERNEL_C_SRCS := \
-    $(KERNEL)/main.c  \
-    $(KERNEL)/video.c \
-    $(KERNEL)/util.c  \
-    $(KERNEL)/acpi.c  \
-    $(KERNEL)/smp.c   \
-    $(KERNEL)/font.c
+    $(KERNEL)/main.c     \
+    $(KERNEL)/video.c    \
+    $(KERNEL)/acpi.c     \
+    $(KERNEL)/smp.c      \
+    $(KERNEL)/font.c     \
+    $(KERNEL)/kalloc.c   \
+    $(KERNEL)/spinlock.c \
+    $(KERNEL)/idt.c      \
+    $(KERNEL)/panic.c    \
+    $(KERNEL)/cpu.c      \
+    $(KERNEL)/pic.c      \
+    $(KERNEL)/lapic.c    \
+    $(LIB)/string.c      \
+    $(LIB)/ctype.c       \
+    $(LIB)/stdio.c       \
+    $(LIB)/assert.c
+
+# Kernel assembly sources
+KERNEL_S_SRCS := \
+    $(KERNEL)/entry64.S      \
+    $(KERNEL)/trap_entry.S   \
+    $(KERNEL)/irq_vectors.S
 
 KERNEL_C_OBJS := $(patsubst %.c, $(BUILD)/%.o, $(KERNEL_C_SRCS))
-KERNEL_S_OBJS := $(BUILD)/$(KERNEL)/entry64.o
+KERNEL_S_OBJS := $(patsubst %.S, $(BUILD)/%.o, $(KERNEL_S_SRCS))
 TRAMP_OBJ     := $(BUILD)/$(KERNEL)/ap_trampoline_raw.o
 
-.PHONY: all clean run debug dirs
+.PHONY: all clean run debug dirs gen-irq
 
-all: dirs $(BUILD)/os.img
+all: dirs gen-irq $(BUILD)/os.img
 
 dirs:
-	mkdir -p $(BUILD)/$(BOOT) $(BUILD)/$(KERNEL)
+	mkdir -p $(BUILD)/$(BOOT) $(BUILD)/$(KERNEL) $(BUILD)/$(LIB)
+
+# Generate IRQ handler stubs from script
+gen-irq:
+	python3 tools/gen_irq_vectors.py $(KERNEL)/irq_vectors.S
 
 # AP trampoline (i386 ELF)
 $(BUILD)/$(KERNEL)/ap_trampoline.o: $(KERNEL)/ap_trampoline.S
@@ -62,8 +84,11 @@ $(TRAMP_OBJ): $(BUILD)/trampoline.bin
 $(BUILD)/$(KERNEL)/%.o: $(KERNEL)/%.c
 	$(CLANG) $(CFLAGS) -o $@ $<
 
-# Kernel 64-bit entry
-$(BUILD)/$(KERNEL)/entry64.o: $(KERNEL)/entry64.S
+$(BUILD)/$(LIB)/%.o: $(LIB)/%.c
+	$(CLANG) $(CFLAGS) -o $@ $<
+
+# Kernel 64-bit assembly objects
+$(BUILD)/$(KERNEL)/%.o: $(KERNEL)/%.S
 	$(CLANG) $(AS64FLAGS) -o $@ $<
 
 # Link kernel ELF
@@ -145,3 +170,4 @@ debug: $(BUILD)/os.img
 
 clean:
 	rm -rf $(BUILD)
+	rm -f $(KERNEL)/irq_vectors.S

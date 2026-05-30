@@ -1,6 +1,6 @@
 #include <types.h>
+#include <string.h>
 #include "acpi.h"
-#include "util.h"
 
 /* 模块状态 */
 static ACPI_RSDP *g_rsdp    = (ACPI_RSDP *)0;
@@ -27,7 +27,7 @@ void acpi_init(uint64_t rsdp_phys)
     g_rsdp = (ACPI_RSDP *)(uintptr_t)rsdp_phys;
 
     /* 验证签名和校验和 */
-    if (kstrncmp(g_rsdp->signature, "RSD PTR ", 8) != 0) {
+    if (strncmp(g_rsdp->signature, "RSD PTR ", 8) != 0) {
         g_rsdp = (ACPI_RSDP *)0;
         return;
     }
@@ -56,7 +56,7 @@ ACPI_Header *acpi_find_table(const char *sig)
         uint32_t count = (xsdt->hdr.length - sizeof(ACPI_Header)) / 8;
         for (uint32_t i = 0; i < count; i++) {
             ACPI_Header *hdr = (ACPI_Header *)(uintptr_t)xsdt->entries[i];
-            if (kstrncmp(hdr->signature, sig, 4) == 0)
+            if (strncmp(hdr->signature, sig, 4) == 0)
                 return hdr;
         }
     } else {
@@ -67,7 +67,7 @@ ACPI_Header *acpi_find_table(const char *sig)
         uint32_t count = (rsdt->hdr.length - sizeof(ACPI_Header)) / 4;
         for (uint32_t i = 0; i < count; i++) {
             ACPI_Header *hdr = (ACPI_Header *)(uintptr_t)rsdt->entries[i];
-            if (kstrncmp(hdr->signature, sig, 4) == 0)
+            if (strncmp(hdr->signature, sig, 4) == 0)
                 return hdr;
         }
     }

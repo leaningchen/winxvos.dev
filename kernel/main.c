@@ -1,45 +1,14 @@
 #include <types.h>
 #include <boot_info.h>
 #include <e820.h>
+#include <libc.h>
+#include <kalloc.h>
+#include <defs.h>
+#include <x86_64.h>
+#include <pic.h>
+#include <lapic.h>
 #include "video.h"
-#include "util.h"
 #include "smp.h"
-
-/* 打印分隔线 */
-static void print_line(void)
-{
-    video_print("----------------------------------------\n", COLOR_GRAY);
-}
-
-/* 打印键值对：key: value */
-static void print_kv(const char *key, const char *val, uint32_t vc)
-{
-    video_print(key,  COLOR_LGRAY);
-    video_print(val,  vc);
-    video_print("\n", COLOR_WHITE);
-}
-
-/* 格式化内存大小 (字节) 为 "XXXX MB" 字符串 */
-static void fmt_mem_mb(uint64_t bytes, char *buf)
-{
-    uint64_t mb = bytes / (1024ULL * 1024ULL);
-    uitoa(mb, buf, 10);
-    size_t len = kstrlen(buf);
-    buf[len++] = ' '; buf[len++] = 'M'; buf[len++] = 'B'; buf[len] = '\0';
-}
-
-/* E820 类型名称 */
-static const char *e820_type_name(uint32_t type)
-{
-    switch (type) {
-    case 1:  return "Usable";
-    case 2:  return "Reserved";
-    case 3:  return "ACPI Reclaimable";
-    case 4:  return "ACPI NVS";
-    case 5:  return "Bad Memory";
-    default: return "Unknown";
-    }
-}
 
 /*===========================================================================
  * kernel_main — C 语言内核主函数
@@ -49,8 +18,7 @@ void kernel_main(BootInfo *info)
 {
     /* 1. 校验 BootInfo magic */
     if (info->magic != BOOT_INFO_MAGIC) {
-        /* 无法初始化视频，只能挂起 */
-        while (1) __asm__ volatile ("hlt");
+        while (1) hlt();
     }
 
     /* 2. 初始化视频 */
@@ -59,22 +27,12 @@ void kernel_main(BootInfo *info)
     video_clear(COLOR_BG);
 
     /* 3. Banner */
-    video_print("  WinixOS Bootloader  v1.0\n", COLOR_CYAN);
-    print_line();
+    kprintf_color(COLOR_CYAN, "  WinixOS v2.0\n");
+    kprintf("----------------------------------------\n");
 
     /* 4. 显示分辨率 */
-    {
-        char wbuf[8], hbuf[8], buf[32];
-        uitoa(info->fb_width,  wbuf, 10);
-        uitoa(info->fb_height, hbuf, 10);
-        kstrcpy(buf, wbuf);
-        size_t l = kstrlen(buf);
-        buf[l++] = 'x';
-        kstrcpy(buf + l, hbuf);
-        l = kstrlen(buf);
-        buf[l++] = 'x'; buf[l++] = '3'; buf[l++] = '2'; buf[l] = '\0';
-        print_kv("Display  : ", buf, COLOR_WHITE);
-    }
+    kprintf_color(COLOR_WHITE, "Display  : %ux%ux32\n",
+                  info->fb_width, info->fb_height);
 
     /* 5. 统计并显示内存 */
     {
@@ -83,59 +41,62 @@ void kernel_main(BootInfo *info)
         for (uint32_t i = 0; i < info->e820_count; i++)
             if (e820[i].type == E820_USABLE)
                 usable += e820[i].length;
-
-        char mbuf[24];
-        fmt_mem_mb(usable, mbuf);
-        print_kv("Memory   : ", mbuf, COLOR_GREEN);
+        kprintf_color(COLOR_GREEN, "Memory   : %lu MB\n",
+                      usable / (1024ULL * 1024ULL));
     }
 
-    /* 6. 显示 E820 内存映射表 */
-    video_print("\n", COLOR_WHITE);
-    video_print("E820 Memory Map:\n", COLOR_YELLOW);
+    /* 6. 初始化物理内存分配器 (暂时跳过，验证中断) */
+    kprintf_color(COLOR_YELLOW, "Kalloc   : SKIPPED (testing interrupts)\n");
+
+    /* 7. 重映射并屏蔽 8259A PIC（避免与 CPU 异常向量冲突）*/
+    pic_init();
+    kprintf_color(COLOR_GREEN, "PIC      : remapped (0x20-0x2F), all IRQs masked\n");
+
+    /* 8. 初始化 IDT */
+    idt_init();
+
+    /* 9. 初始化 LAPIC（启用、配置定时器、屏蔽 LINT0/LINT1）*/
+    lapic_init();
+
+    /* 10. 显示 E820 内存映射表 */
+    kprintf_color(COLOR_YELLOW, "\nE820 Memory Map:\n");
     {
         E820Entry *e820 = (E820Entry *)(uintptr_t)info->e820_addr;
-        char hbuf[20], sbuf[20];
-
         for (uint32_t i = 0; i < info->e820_count; i++) {
-            /* 地址 */
-            u64_to_hex(e820[i].base, hbuf);
-            video_print("  ", COLOR_WHITE);
-            video_print(hbuf, COLOR_LGRAY);
-            video_print(" + ", COLOR_GRAY);
-
-            /* 长度（MB，若 < 1MB 则显示 KB）*/
-            if (e820[i].length >= 1024ULL * 1024ULL) {
-                fmt_mem_mb(e820[i].length, sbuf);
-            } else {
-                uitoa(e820[i].length / 1024ULL, sbuf, 10);
-                size_t l = kstrlen(sbuf);
-                sbuf[l++] = ' '; sbuf[l++] = 'K'; sbuf[l++] = 'B';
-                sbuf[l] = '\0';
+            const char *type_name;
+            uint32_t type_color;
+            switch (e820[i].type) {
+            case E820_USABLE:   type_name = "Usable";           type_color = COLOR_GREEN;  break;
+            case E820_RESERVED: type_name = "Reserved";         type_color = COLOR_GRAY;   break;
+            case E820_ACPI_RCL: type_name = "ACPI Reclaimable"; type_color = COLOR_LGRAY;  break;
+            case E820_ACPI_NVS: type_name = "ACPI NVS";        type_color = COLOR_GRAY;   break;
+            case E820_BAD:      type_name = "Bad Memory";       type_color = COLOR_RED;    break;
+            default:            type_name = "Unknown";          type_color = COLOR_GRAY;   break;
             }
-            video_print(sbuf, COLOR_LGRAY);
-            video_print("  ", COLOR_GRAY);
-            video_print(e820_type_name(e820[i].type),
-                        e820[i].type == 1 ? COLOR_GREEN : COLOR_GRAY);
-            video_print("\n", COLOR_WHITE);
+
+            uint64_t len = e820[i].length;
+            if (len >= 1024ULL * 1024ULL) {
+                kprintf("  %p + %lu MB  ", e820[i].base, len / (1024ULL * 1024ULL));
+            } else {
+                kprintf("  %p + %lu KB  ", e820[i].base, len / 1024ULL);
+            }
+            kprintf_color(type_color, "%s\n", type_name);
         }
     }
 
-    /* 7. SMP 初始化 */
-    video_print("\n", COLOR_WHITE);
-    video_print("Initializing SMP...\n", COLOR_YELLOW);
-    int cpus = smp_init(info);
+    /* 9. SMP 初始化 */
+    kprintf_color(COLOR_YELLOW, "\nInitializing SMP...\n");
+    int cpu_count = smp_init(info);
+    kprintf_color(COLOR_GREEN, "CPU Cores: %d\n", cpu_count);
 
-    {
-        char cbuf[8];
-        uitoa((uint64_t)cpus, cbuf, 10);
-        print_kv("CPU Cores: ", cbuf, COLOR_GREEN);
-    }
+    kprintf("----------------------------------------\n");
+    kprintf_color(COLOR_CYAN, "System ready. Interrupts enabled.\n");
 
-    print_line();
-    video_print("System ready.\n", COLOR_CYAN);
+    /* 10. 启用中断 */
+    sti();
 
-    /* 8. 永久挂起 */
+    /* 11. 永久等待中断 */
     while (1) {
-        __asm__ volatile ("hlt");
+        hlt();
     }
 }

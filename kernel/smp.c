@@ -1,8 +1,8 @@
 #include <types.h>
 #include <boot_info.h>
+#include <string.h>
 #include "smp.h"
 #include "acpi.h"
-#include "util.h"
 
 /* AP 蹦床代码在内核镜像中的位置（由链接脚本导出）*/
 extern char __trampoline_start[];
@@ -91,8 +91,8 @@ int smp_init(BootInfo *info)
 
     /* 将蹦床复制到物理地址 0x8000 */
     uint64_t tramp_size = (uint64_t)(__trampoline_end - __trampoline_start);
-    kmemcpy((void *)(uintptr_t)AP_TRAMPOLINE_ADDR,
-            __trampoline_start, (size_t)tramp_size);
+    memcpy((void *)(uintptr_t)AP_TRAMPOLINE_ADDR,
+           __trampoline_start, (size_t)tramp_size);
 
     uint8_t vector = (uint8_t)(AP_TRAMPOLINE_ADDR >> 12);   /* = 0x08 */
     uint32_t expected = (uint32_t)(1 + ap_count);
