@@ -17,7 +17,8 @@
  * 参考 xv6 的 trapasm.S，适配64位
  */
 
-#define KERN_CODE_SEL  0x08
+#define KERN_CODE_SEL  0x18     /* 64位内核代码段 (CODE64, GDT index 3) */
+#define KERN_DATA_SEL  0x20     /* 64位内核数据段 (DATA64, GDT index 4) */
 
 /* trapframe 结构偏移 (与 include/idt.h 中的 struct trapframe 对应) */
 #define TF_R15    0
@@ -98,15 +99,27 @@ alltraps:
     pushq   %r15             /* offset 0 (最后 push = 最低栈地址 = RSP) */
 
     /* 设置内核数据段 */
-    movw    $0x20, %ax        /* 内核数据段选择子 (GDT entry 3) */
+    movw    $KERN_DATA_SEL, %ax   /* 64位内核数据段选择子 (DATA64, 0x20) */
     movw    %ax, %ds
     movw    %ax, %es
 
     /* 将栈指针 (trapframe 地址) 传给 trap_handler */
     movq    %rsp, %rdi
 
+    /* 动态栈对齐：保存 RSP 到 RBP，强制 RSP 对齐到 16 字节。
+     * System V AMD64 ABI 要求 (RSP+8) ≡ 0 mod 16 在 C 函数入口成立。
+     * kprintf/sprintf 含 movaps 指令，需要 16 字节栈对齐。
+     * 中断可能发生在栈未对齐的时刻，必须动态修正。 */
+    pushq   %rbp              /* 保存 RBP (同时用作 RSP 恢复锚点) */
+    movq    %rsp, %rbp        /* RBP = 当前 RSP */
+    andq    $~0xF, %rsp       /* RSP 向下对齐到 16 字节边界 */
+
     /* 调用 C 函数 */
     call    trap_handler
+
+    /* 恢复原始 RSP (回到 trapframe 结构顶部) */
+    movq    %rbp, %rsp        /* RSP = pushq %rbp 之前的值 + 8 → pop 后回到 trapframe */
+    popq    %rbp              /* 恢复 RBP, RSP 回到 trapframe 地址 */
 
 /*---------------------------------------------------------------------------
  * trapret — 从陷阱/中断返回

@@ -138,13 +138,14 @@ void trap_handler(struct trapframe *tf)
     /* IRQ 中断处理 (32+) */
     int irq = (int)(tf->trapno - T_IRQ0);
 
-    /* 时钟中断 — 目前仅 EOI */
+    /* 时钟中断 — 仅 EOI，不打印 */
     if (irq == IRQ_TIMER) {
-        /* TODO: 时钟计数、进程调度唤醒 */
+        lapic_eoi();
+        return;
     }
 
-    /* 其他 IRQ — 暂时只打印 */
-    if (irq != IRQ_TIMER && irq != IRQ_SPURIOUS && irq != IRQ_ERROR) {
+    /* 其他 IRQ — 打印并 EOI */
+    if (irq != IRQ_SPURIOUS && irq != IRQ_ERROR) {
         kprintf_color(COLOR_YELLOW, "IRQ %d\n", irq);
     }
 

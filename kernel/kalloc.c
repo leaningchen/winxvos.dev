@@ -32,6 +32,10 @@ struct {
 /*---------------------------------------------------------------------------
  * kinit — 初始化物理内存分配器
  * 遍历 E820 usable 区域，将内核结束到 PHYSTOP 之间的可用页加入 freelist
+ *
+ * 参考 Linux: 初始化阶段直接构建 freelist，不做 per-page memset 填充，
+ * 不使用 spinlock（此时只有 BSP 单核运行，无需锁保护）。
+ * kalloc() 分配时会清零页面，确保分配的内存是干净的。
  *---------------------------------------------------------------------------*/
 void kinit(BootInfo *info)
 {
@@ -65,9 +69,14 @@ void kinit(BootInfo *info)
         if (start >= end)
             continue;
 
-        /* 将该区域的每一页加入 freelist */
-        for (uint64_t p = start; p < end; p += PGSIZE)
-            kfree((void *)(uintptr_t)p);
+        /* 直接构建 freelist：不做 per-page memset 填充和 spinlock
+         * （Linux 在 boot 阶段也是如此，kalloc 分配时会清零页面） */
+        for (uint64_t p = end - PGSIZE; p >= start; p -= PGSIZE) {
+            struct run *r = (struct run *)(uintptr_t)p;
+            r->next = kmem.freelist;
+            kmem.freelist = r;
+            kmem.free_pages++;
+        }
     }
 }
 
@@ -114,4 +123,15 @@ void *kalloc(void)
         memset((void *)r, 0, PGSIZE);  /* 清零分配的页 */
 
     return (void *)r;
+}
+
+/*---------------------------------------------------------------------------
+ * kmem_free_pages — 返回当前空闲页数
+ *---------------------------------------------------------------------------*/
+uint64_t kmem_free_pages(void)
+{
+    acquire(&kmem.lock);
+    uint64_t n = kmem.free_pages;
+    release(&kmem.lock);
+    return n;
 }

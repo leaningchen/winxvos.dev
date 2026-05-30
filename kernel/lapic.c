@@ -75,9 +75,7 @@ void lapic_init(void)
     /* Set divide configuration (divide by 16) */
     lapic_write(LAPIC_TIMER_DCR, LAPIC_TIMER_DIV_16);
 
-    /* Set initial count (calibrated approximate value for ~100Hz in QEMU)
-     * QEMU LAPIC timer frequency is typically the CPU bus frequency / divide.
-     * For a reasonable tick rate, use a moderate initial count. */
+    /* Set initial count */
     lapic_write(LAPIC_TIMER_ICR, 1000000);
 
     kprintf_color(COLOR_GREEN, "LAPIC    : enabled (base=%p)\n",

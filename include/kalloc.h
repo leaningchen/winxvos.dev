@@ -7,5 +7,6 @@
 void kinit(BootInfo *info);     /* 初始化分配器 (从 E820 可用区域) */
 void *kalloc(void);             /* 分配一个 4096 字节物理页 */
 void kfree(void *v);            /* 释放一个物理页 */
+uint64_t kmem_free_pages(void); /* 返回空闲页数 */
 
 #endif /* __KALLOC_H__ */

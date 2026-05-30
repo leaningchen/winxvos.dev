@@ -4,6 +4,7 @@
 #include <libc.h>
 #include <kalloc.h>
 #include <defs.h>
+#include <param.h>
 #include <x86_64.h>
 #include <pic.h>
 #include <lapic.h>
@@ -45,18 +46,21 @@ void kernel_main(BootInfo *info)
                       usable / (1024ULL * 1024ULL));
     }
 
-    /* 6. 初始化物理内存分配器 (暂时跳过，验证中断) */
-    kprintf_color(COLOR_YELLOW, "Kalloc   : SKIPPED (testing interrupts)\n");
-
-    /* 7. 重映射并屏蔽 8259A PIC（避免与 CPU 异常向量冲突）*/
+    /* 6. 重映射并屏蔽 8259A PIC（避免与 CPU 异常向量冲突）*/
     pic_init();
     kprintf_color(COLOR_GREEN, "PIC      : remapped (0x20-0x2F), all IRQs masked\n");
 
-    /* 8. 初始化 IDT */
+    /* 7. 初始化 IDT（在 kinit 之前，确保异常有 handler）*/
     idt_init();
+    kprintf_color(COLOR_GREEN, "IDT      : initialized\n");
 
-    /* 9. 初始化 LAPIC（启用、配置定时器、屏蔽 LINT0/LINT1）*/
+    /* 8. 初始化 LAPIC（启用、配置定时器、屏蔽 LINT0/LINT1）*/
     lapic_init();
+
+    /* 9. 初始化物理内存分配器 */
+    kinit(info);
+    kprintf_color(COLOR_GREEN, "Kalloc   : %lu free pages (%lu MB)\n",
+                  kmem_free_pages(), kmem_free_pages() * PGSIZE / (1024ULL * 1024ULL));
 
     /* 10. 显示 E820 内存映射表 */
     kprintf_color(COLOR_YELLOW, "\nE820 Memory Map:\n");
@@ -92,7 +96,7 @@ void kernel_main(BootInfo *info)
     kprintf("----------------------------------------\n");
     kprintf_color(COLOR_CYAN, "System ready. Interrupts enabled.\n");
 
-    /* 10. 启用中断 */
+    /* 启用中断 */
     sti();
 
     /* 11. 永久等待中断 */
