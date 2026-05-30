@@ -19,7 +19,7 @@
  *     - 进入 HLT 等待循环
  */
 
-.equ PAGE_TABLE_BASE,   0x400000
+.equ PAGE_TABLE_BASE,   0x70000     /* 与 stage2 setup_paging 一致（PML4 at 0x70000）*/
 .equ AP_STACK_BASE,     0x9000      /* 每核 4KB，按 LAPIC ID 索引 */
 .equ AP_STACK_SIZE,     0x1000      /* 4KB 每核 */
 .equ LAPIC_BASE,        0xFEE00000  /* LAPIC 默认 MMIO 基地址 */
@@ -136,6 +136,15 @@ ap_entry64:
     xorw    %ax, %ax
     movw    %ax, %fs
     movw    %ax, %gs
+
+    /* 启用 SSE（与 BSP entry64.S 保持一致）*/
+    movq    %cr0, %rax
+    andq    $~(1<<2), %rax
+    orq     $(1<<1), %rax
+    movq    %rax, %cr0
+    movq    %cr4, %rax
+    orq     $(3<<9), %rax
+    movq    %rax, %cr4
 
     /* 读取 LAPIC ID（MMIO 地址 0xFEE00020，bit31:24）*/
     movq    $(LAPIC_BASE + LAPIC_ID_REG), %rax

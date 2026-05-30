@@ -15,11 +15,11 @@
 #define KERNEL_SECTORS 256
 #endif
 
-.equ TMP_DRIVE,  0x4000
-.equ TMP_M1680,  0x4002
-.equ TMP_M1440,  0x4004
-.equ TMP_M800,   0x4006
-.equ TMP_E820CNT, 0x4008  /* dword: E820 entry count */
+.equ TMP_DRIVE,   0x500   /* byte:  boot drive */
+.equ TMP_M1680,   0x502   /* word:  VBE mode 1680x1050 */
+.equ TMP_M1440,   0x504   /* word:  VBE mode 1440x900  */
+.equ TMP_M800,    0x506   /* word:  VBE mode 800x600   */
+.equ TMP_E820CNT, 0x508   /* dword: E820 entry count   */
 .equ BOOT_INFO,  0x5000
 .equ E820_BUF,   0x6000
 .equ VBE_INFO,   0x7000
@@ -43,6 +43,8 @@
 .equ BI_FB_HEIGHT,  0x18
 .equ BI_FB_PITCH,   0x10
 .equ BI_FB_BPP,     0x1C
+.equ BI_ACPI_RSDP,  0x30
+.equ TMP_RSDP_LO,   0x50C   /* dword: RSDP 物理地址低32位 */
 
     .code16
     .section .text
@@ -53,7 +55,7 @@ _start:
     movw    %ax, %ds
     movw    %ax, %es
     movw    %ax, %ss
-    movw    $0x4FFE, %sp
+    movw    $0x3FFE, %sp        /* 栈在 0x3FFE，远离 TMP 区 0x4FF0 */
     movb    %dl, (TMP_DRIVE)
     movw    $0, (TMP_M1680)
     movw    $0, (TMP_M1440)
@@ -91,6 +93,90 @@ e820_detect:
     jmp     .e820_loop
 .e820_done:
     movl    %ebp, (TMP_E820CNT)   /* save count; boot_info not cleared yet */
+
+/* -----------------------------------------------------------------------
+ * rsdp_search — 搜索 ACPI RSDP 签名 "RSD PTR "
+ * 搜索范围：
+ *   1. EBDA: 从 [0x40E]*16 开始，搜索前 1KB
+ *   2. BIOS ROM: 0xE0000 - 0xFFFFF
+ * RSDP 始终对齐到 16 字节边界
+ * 找到后将物理地址存入 TMP_RSDP_LO；未找到则存 0
+ * -----------------------------------------------------------------------*/
+rsdp_search:
+    movl    $0, (TMP_RSDP_LO)
+
+    /* --- 搜索 EBDA --- */
+    movw    (0x40E), %ax        /* EBDA 段地址 */
+    testw   %ax, %ax
+    jz      .rsdp_bios          /* 无 EBDA，直接搜 BIOS ROM */
+    movw    %ax, %fs
+    xorw    %si, %si            /* 段内偏移 0 */
+    movw    $64, %cx            /* 1KB / 16 = 64 次 */
+.rsdp_ebda_loop:
+    /* 比较 "RSD PTR " (8 bytes): fs:si */
+    movl    %fs:(%si), %eax
+    cmpl    $0x20445352, %eax   /* "RSD " little-endian */
+    jne     .rsdp_ebda_next
+    movl    %fs:4(%si), %eax
+    cmpl    $0x20525450, %eax   /* "PTR " little-endian */
+    jne     .rsdp_ebda_next
+    /* 找到：计算物理地址 = seg*16 + offset */
+    movw    %fs, %ax
+    movzwl  %ax, %eax
+    shll    $4, %eax
+    movzwl  %si, %edx
+    addl    %edx, %eax
+    movl    %eax, (TMP_RSDP_LO)
+    jmp     .rsdp_done
+.rsdp_ebda_next:
+    addw    $16, %si
+    loop    .rsdp_ebda_loop
+
+    /* --- 搜索 BIOS ROM 0xE0000 - 0xFFFFF --- */
+.rsdp_bios:
+    movw    $0xE000, %ax
+    movw    %ax, %fs            /* 段 0xE000 → 物理 0xE0000 */
+    xorw    %si, %si
+    movw    $0x1000, %cx
+.rsdp_bios_loop:
+    movl    %fs:(%si), %eax
+    cmpl    $0x20445352, %eax
+    jne     .rsdp_bios_next
+    movl    %fs:4(%si), %eax
+    cmpl    $0x20525450, %eax
+    jne     .rsdp_bios_next
+    movw    %fs, %ax
+    movzwl  %ax, %eax
+    shll    $4, %eax
+    movzwl  %si, %edx
+    addl    %edx, %eax
+    movl    %eax, (TMP_RSDP_LO)
+    jmp     .rsdp_done
+.rsdp_bios_next:
+    addw    $16, %si
+    jnz     .rsdp_bios_loop     /* si 回绕到 0 说明段内搜完 */
+    /* 进入下一个段 0xF000 */
+    movw    $0xF000, %ax
+    movw    %ax, %fs
+    movw    $0x1000, %cx
+.rsdp_f000_loop:
+    movl    %fs:(%si), %eax
+    cmpl    $0x20445352, %eax
+    jne     .rsdp_f000_next
+    movl    %fs:4(%si), %eax
+    cmpl    $0x20525450, %eax
+    jne     .rsdp_f000_next
+    movw    %fs, %ax
+    movzwl  %ax, %eax
+    shll    $4, %eax
+    movzwl  %si, %edx
+    addl    %edx, %eax
+    movl    %eax, (TMP_RSDP_LO)
+    jmp     .rsdp_done
+.rsdp_f000_next:
+    addw    $16, %si
+    loop    .rsdp_f000_loop
+.rsdp_done:
 
 vbe_detect:
     xorw    %ax, %ax
@@ -180,7 +266,7 @@ init_boot_info:
     xorw    %ax, %ax
     movw    %ax, %es
     movw    $BOOT_INFO, %di
-    movw    $64, %cx
+    movw    $32, %cx            /* 清 64 字节 (0x40)，覆盖所有字段到 0x3F */
     xorw    %ax, %ax
     rep stosw
     movl    $0xB007B007, %eax
@@ -199,6 +285,10 @@ init_boot_info:
     movl    %eax, (BOOT_INFO + BI_FB_PITCH)
     movb    (VBE_MODE + 0x19), %al
     movb    %al, (BOOT_INFO + BI_FB_BPP)
+    /* ACPI RSDP 物理地址（64位，高32位为0）*/
+    movl    (TMP_RSDP_LO), %eax
+    movl    %eax, (BOOT_INFO + BI_ACPI_RSDP)
+    movl    $0,   (BOOT_INFO + BI_ACPI_RSDP + 4)
 
 enter_pm:
     cli

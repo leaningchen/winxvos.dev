@@ -23,6 +23,17 @@ kernel_entry:
     movw    %ax, %fs
     movw    %ax, %gs
 
+    /* 启用 SSE/SSE2（clang -O2 可能生成 SIMD 指令）
+     * CR4.OSFXSR(bit9)=1, CR4.OSXMMEXCPT(bit10)=1
+     * CR0.EM(bit2)=0, CR0.MP(bit1)=1 */
+    movq    %cr0, %rax
+    andq    $~(1<<2), %rax      /* clear CR0.EM */
+    orq     $(1<<1), %rax       /* set   CR0.MP */
+    movq    %rax, %cr0
+    movq    %cr4, %rax
+    orq     $(3<<9), %rax       /* set CR4.OSFXSR | CR4.OSXMMEXCPT */
+    movq    %rax, %cr4
+
     /* 建立 BSP 内核栈，16 字节对齐 */
     movq    $0x580000, %rsp
     andq    $~0xF, %rsp

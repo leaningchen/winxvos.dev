@@ -40,9 +40,10 @@ static inline void lapic_write(uint64_t base, uint32_t reg, uint32_t val)
 /*---------------------------------------------------------------------------
  * udelay — 简单忙等延时（微秒级近似，无需精确计时）
  *---------------------------------------------------------------------------*/
-static void udelay(uint32_t us)
+/* 粗粒度延时：用于 IPI 序列之间（毫秒级）*/
+static void mdelay(uint32_t ms)
 {
-    volatile uint64_t n = (uint64_t)us * 500ULL;
+    volatile uint64_t n = (uint64_t)ms * 500000ULL;
     while (n--) {
         __asm__ volatile ("pause" ::: "memory");
     }
@@ -71,7 +72,7 @@ static void send_init_ipi(uint64_t lapic_base, uint8_t apic_id)
     /* ICR_LOW: INIT, Level=Assert, Trigger=Edge, Dest=Physical */
     lapic_write(lapic_base, LAPIC_ICR_LOW, 0x000C4500u);
     lapic_icr_wait(lapic_base);
-    udelay(10000);   /* 10ms */
+    mdelay(10);   /* 10ms */
 
     /* De-assert INIT */
     lapic_write(lapic_base, LAPIC_ICR_HIGH, (uint32_t)apic_id << 24);
@@ -89,7 +90,7 @@ static void send_sipi(uint64_t lapic_base, uint8_t apic_id, uint8_t vector)
     lapic_write(lapic_base, LAPIC_ICR_LOW,
                 0x000C4600u | (uint32_t)vector);   /* SIPI */
     lapic_icr_wait(lapic_base);
-    udelay(200);     /* 200μs */
+    mdelay(1);     /* 1ms（规范要求 200μs，留裕量）*/
 }
 
 /*---------------------------------------------------------------------------
@@ -131,15 +132,17 @@ int smp_init(BootInfo *info)
         send_sipi(lapic_base, ap_ids[i], vector);   /* 第二次 SIPI */
     }
 
-    /* 等待所有 AP 上线（最多 200ms）*/
+    /* 等待所有 AP 上线：纯自旋直到 count 达到预期值（最多等 5 秒）*/
     uint32_t expected = (uint32_t)(1 + ap_count);
-    uint32_t timeout  = 200000;   /* 200ms @ 1μs/次 */
+    uint32_t timeout  = 5000;
     while (*SMP_CPU_COUNT_ADDR < expected && timeout > 0) {
-        udelay(1);
+        mdelay(1);   /* 每次等 1ms */
         timeout--;
     }
 
     uint32_t online = *SMP_CPU_COUNT_ADDR;
+    /* 钳位：防止 AP 重启多次导致计数超出预期 */
+    if (online > expected) online = expected;
     info->cpu_count = online;
 
     return (int)online;
