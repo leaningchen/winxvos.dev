@@ -96,10 +96,55 @@ void kernel_main(BootInfo *info)
     kprintf("----------------------------------------\n");
     kprintf_color(COLOR_CYAN, "System ready. Interrupts enabled.\n");
 
+    /* 12. 图形功能演示（展示 VESA 图形绘制 API）*/
+    /*
+     * 策略：先把所有文字一次性打印完，再绘制图形。
+     * 文字打印结束后调用 video_get_cursor_y() 获取光标像素 Y，
+     * 图形区域从该位置下方开始，彻底避免文字与图形重叠。
+     */
+    kprintf_color(COLOR_YELLOW, "\nGraphics Demo:\n");
+    kprintf_color(COLOR_WHITE,  "  rect  circle  round-rect  triangle  pentagon  line\n");
+    kprintf_color(COLOR_GREEN,  "Graphics demo complete.\n");
+
+    /* 所有文字已打印完毕，此刻读取光标 Y 像素坐标 */
+    int gfx_top = video_get_cursor_y() + 16; /* 额外留 16px 间距 */
+    int gfx_cy  = gfx_top + 60;             /* 圆心/图形中线 Y */
+
+    /* --- 蓝色填充矩形 + 白色描边 --- */
+    video_fill_rect(50, gfx_top, 200, 120, RGB(0, 80, 200));
+    video_draw_rect(50, gfx_top, 200, 120, COLOR_WHITE);
+
+    /* --- 绿色填充圆形 + 白色轮廓 --- */
+    video_fill_circle(360, gfx_cy, 60, RGB(0, 180, 80));
+    video_draw_circle(360, gfx_cy, 60, COLOR_WHITE);
+
+    /* --- 黄色填充圆角矩形 + 白色轮廓 --- */
+    video_fill_round_rect(490, gfx_top, 180, 120, 20, COLOR_YELLOW);
+    video_draw_round_rect(490, gfx_top, 180, 120, 20, COLOR_WHITE);
+
+    /* --- 红色填充三角形 + 白色轮廓（顶点向下）--- */
+    {
+        int tx[] = {760,             840,       680      };
+        int ty[] = {gfx_top + 120,   gfx_top,   gfx_top  };
+        video_fill_polygon(tx, ty, 3, COLOR_RED);
+        video_draw_polygon(tx, ty, 3, COLOR_WHITE);
+    }
+
+    /* --- 青色填充五边形 + 白色轮廓 --- */
+    {
+        int px[] = {960,          1010,            990,             930,             910          };
+        int py[] = {gfx_top + 10, gfx_top + 50,    gfx_top + 110,   gfx_top + 110,   gfx_top + 50 };
+        video_fill_polygon(px, py, 5, COLOR_CYAN);
+        video_draw_polygon(px, py, 5, COLOR_WHITE);
+    }
+
+    /* --- 灰色斜线，贯穿图形区域下方 --- */
+    video_draw_line(30, gfx_top + 140, 1100, gfx_top + 160, COLOR_LGRAY);
+
     /* 启用中断 */
     sti();
 
-    /* 11. 永久等待中断 */
+    /* 13. 永久等待中断 */
     while (1) {
         hlt();
     }
