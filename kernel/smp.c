@@ -15,14 +15,12 @@ extern char __trampoline_end[];
 #define AP_TRAMPOLINE_ADDR  0x8000ULL
 
 /* LAPIC 寄存器偏移 */
-#define LAPIC_ID        0x020
-#define LAPIC_EOI       0x0B0
-#define LAPIC_ICR_LOW   0x300
-#define LAPIC_ICR_HIGH  0x310
-#define LAPIC_ICR_PENDING (1u << 12)
+#define LAPIC_ICR_LOW       0x300
+#define LAPIC_ICR_HIGH      0x310
+#define LAPIC_ICR_PENDING   (1u << 12)
 
 /* 最大支持 AP 数 */
-#define MAX_AP_COUNT    31
+#define MAX_AP_COUNT        31
 
 /*---------------------------------------------------------------------------
  * lapic_read / lapic_write
@@ -38,23 +36,11 @@ static inline void lapic_write(uint64_t base, uint32_t reg, uint32_t val)
 }
 
 /*---------------------------------------------------------------------------
- * udelay — 简单忙等延时（微秒级近似，无需精确计时）
- *---------------------------------------------------------------------------*/
-/* 粗粒度延时：用于 IPI 序列之间（毫秒级）*/
-static void mdelay(uint32_t ms)
-{
-    volatile uint64_t n = (uint64_t)ms * 500000ULL;
-    while (n--) {
-        __asm__ volatile ("pause" ::: "memory");
-    }
-}
-
-/*---------------------------------------------------------------------------
- * lapic_icr_wait — 等待 ICR 发送完成（bit12 清零）
+ * lapic_icr_wait — 等待 ICR Delivery Status 清零（bit12）
  *---------------------------------------------------------------------------*/
 static void lapic_icr_wait(uint64_t lapic_base)
 {
-    uint32_t timeout = 100000;
+    uint32_t timeout = 1000000;
     while ((lapic_read(lapic_base, LAPIC_ICR_LOW) & LAPIC_ICR_PENDING)
            && timeout--)
     {
@@ -63,38 +49,25 @@ static void lapic_icr_wait(uint64_t lapic_base)
 }
 
 /*---------------------------------------------------------------------------
- * send_init_ipi — 向目标 AP 发送 INIT IPI
+ * spin_pause — 纯自旋若干次（不依赖时间，给硬件/QEMU 让出时间片）
  *---------------------------------------------------------------------------*/
-static void send_init_ipi(uint64_t lapic_base, uint8_t apic_id)
+static void spin_pause(uint32_t n)
 {
-    /* ICR_HIGH: 目标 APIC ID（bit31:24）*/
-    lapic_write(lapic_base, LAPIC_ICR_HIGH, (uint32_t)apic_id << 24);
-    /* ICR_LOW: INIT, Level=Assert, Trigger=Edge, Dest=Physical */
-    lapic_write(lapic_base, LAPIC_ICR_LOW, 0x000C4500u);
-    lapic_icr_wait(lapic_base);
-    mdelay(10);   /* 10ms */
-
-    /* De-assert INIT */
-    lapic_write(lapic_base, LAPIC_ICR_HIGH, (uint32_t)apic_id << 24);
-    lapic_write(lapic_base, LAPIC_ICR_LOW,  0x000C0500u);
-    lapic_icr_wait(lapic_base);
-}
-
-/*---------------------------------------------------------------------------
- * send_sipi — 向目标 AP 发送 SIPI
- * vector: AP_TRAMPOLINE_ADDR >> 12 = 0x08
- *---------------------------------------------------------------------------*/
-static void send_sipi(uint64_t lapic_base, uint8_t apic_id, uint8_t vector)
-{
-    lapic_write(lapic_base, LAPIC_ICR_HIGH, (uint32_t)apic_id << 24);
-    lapic_write(lapic_base, LAPIC_ICR_LOW,
-                0x000C4600u | (uint32_t)vector);   /* SIPI */
-    lapic_icr_wait(lapic_base);
-    mdelay(1);     /* 1ms（规范要求 200μs，留裕量）*/
+    while (n--) {
+        __asm__ volatile ("pause" ::: "memory");
+    }
 }
 
 /*---------------------------------------------------------------------------
  * smp_init — 初始化 SMP，唤醒所有 AP
+ *
+ * 流程（Intel SDM Vol.3 Ch.8.4.4 MP 初始化协议）:
+ *   1. 广播 INIT IPI → 自旋等待 ICR 发送完成
+ *   2. 自旋 ~10ms 等量（500000 次 pause）
+ *   3. 广播 SIPI    → 自旋等待 ICR 发送完成
+ *   4. 自旋 ~200μs  等量（10000 次 pause）
+ *   5. 若 AP 未全部上线，再发一次 SIPI
+ *   6. 纯自旋等待 cpu_count 达到预期（最多 2000 万次 pause ≈ 若干毫秒）
  *---------------------------------------------------------------------------*/
 int smp_init(BootInfo *info)
 {
@@ -109,40 +82,63 @@ int smp_init(BootInfo *info)
     uint8_t ap_ids[MAX_AP_COUNT];
     int ap_count = acpi_get_lapic_ids(ap_ids, MAX_AP_COUNT);
 
-    /* 初始化 cpu_count：BSP 已在线 = 1 */
+    /* BSP 已在线 */
     *SMP_CPU_COUNT_ADDR = 1;
-    info->cpu_count = 1;
+    info->cpu_count     = 1;
 
-    if (ap_count == 0) {
-        /* 单核机器，直接返回 */
+    if (ap_count == 0)
         return 1;
-    }
 
-    /* 将 AP 蹦床代码复制到物理地址 0x8000 */
+    /* 将蹦床复制到物理地址 0x8000 */
     uint64_t tramp_size = (uint64_t)(__trampoline_end - __trampoline_start);
     kmemcpy((void *)(uintptr_t)AP_TRAMPOLINE_ADDR,
             __trampoline_start, (size_t)tramp_size);
 
-    /* 发送 INIT-SIPI-SIPI 序列唤醒每个 AP */
     uint8_t vector = (uint8_t)(AP_TRAMPOLINE_ADDR >> 12);   /* = 0x08 */
-
-    for (int i = 0; i < ap_count; i++) {
-        send_init_ipi(lapic_base, ap_ids[i]);
-        send_sipi(lapic_base, ap_ids[i], vector);
-        send_sipi(lapic_base, ap_ids[i], vector);   /* 第二次 SIPI */
-    }
-
-    /* 等待所有 AP 上线：纯自旋直到 count 达到预期值（最多等 5 秒）*/
     uint32_t expected = (uint32_t)(1 + ap_count);
-    uint32_t timeout  = 5000;
-    while (*SMP_CPU_COUNT_ADDR < expected && timeout > 0) {
-        mdelay(1);   /* 每次等 1ms */
-        timeout--;
+
+    /* --- 逐个发送 INIT-SIPI-SIPI（避免广播在 QEMU 下的兼容性问题）--- */
+    for (int i = 0; i < ap_count; i++) {
+        uint32_t dest = (uint32_t)ap_ids[i] << 24;
+
+        /* INIT assert */
+        lapic_write(lapic_base, LAPIC_ICR_HIGH, dest);
+        lapic_write(lapic_base, LAPIC_ICR_LOW,  0x000C4500u);
+        lapic_icr_wait(lapic_base);
     }
+
+    /* 等待 ~10ms：给所有 AP 完成 INIT 复位（500000 次 pause）*/
+    spin_pause(500000);
+
+    /* 第一次 SIPI */
+    for (int i = 0; i < ap_count; i++) {
+        uint32_t dest = (uint32_t)ap_ids[i] << 24;
+        lapic_write(lapic_base, LAPIC_ICR_HIGH, dest);
+        lapic_write(lapic_base, LAPIC_ICR_LOW,  0x000C4600u | vector);
+        lapic_icr_wait(lapic_base);
+    }
+
+    /* 等待 ~200μs（10000 次 pause）*/
+    spin_pause(10000);
+
+    /* 若 AP 尚未全部上线，发第二次 SIPI */
+    if (*SMP_CPU_COUNT_ADDR < expected) {
+        for (int i = 0; i < ap_count; i++) {
+            uint32_t dest = (uint32_t)ap_ids[i] << 24;
+            lapic_write(lapic_base, LAPIC_ICR_HIGH, dest);
+            lapic_write(lapic_base, LAPIC_ICR_LOW,  0x000C4600u | vector);
+            lapic_icr_wait(lapic_base);
+        }
+        spin_pause(10000);
+    }
+
+    /* 纯自旋等待所有 AP 上线（最多 2000 万次 pause）*/
+    uint32_t spin = 20000000u;
+    while (*SMP_CPU_COUNT_ADDR < expected && spin--)
+        __asm__ volatile ("pause" ::: "memory");
 
     uint32_t online = *SMP_CPU_COUNT_ADDR;
-    /* 钳位：防止 AP 重启多次导致计数超出预期 */
-    if (online > expected) online = expected;
+    if (online > expected) online = expected;   /* 防止重复计数溢出 */
     info->cpu_count = online;
 
     return (int)online;
