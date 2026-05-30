@@ -1,0 +1,50 @@
+###############################################################
+# bochsrc.txt — WinixOS Bootloader Bochs 配置文件
+###############################################################
+
+# CPU 配置
+cpu: model=corei7_sandy_bridge_2600, count=4, ips=50000000, reset_on_triple_fault=1
+
+# 内存：256MB
+megs: 256
+
+# 磁盘镜像（从 build/os.img 启动）
+ata0: enabled=1, ioaddr1=0x1f0, ioaddr2=0x3f0, irq=14
+ata0-master: type=disk, path="build/os.img", mode=flat, cylinders=0, heads=0, spt=0
+
+# 引导顺序：硬盘
+boot: disk
+
+# 显示：1680x1050 VESA（Bochs VBE）
+display_library: sdl2
+vgaromimage: file=$BXSHARE/VGABIOS-lgpl-latest
+romimage: file=$BXSHARE/BIOS-bochs-latest
+
+# 日志
+log: bochsout.txt
+logprefix: %t%e%d
+debugger_log: debugger.out
+
+# 时钟
+clock: sync=realtime, time0=local
+
+# APIC（多核支持）
+cpuid: apic=x2apic
+apic: enabled=1
+
+# 键盘/鼠标
+keyboard: type=mf, serial_delay=250, paste_delay=100000
+mouse: enabled=0
+
+# ACPI
+pci: enabled=1, chipset=i440fx
+acpi: enabled=1
+
+# 网络（禁用）
+# network interface
+
+###############################################################
+# 调试配置（取消注释以启用 Bochs 调试器）
+###############################################################
+# display_library: sdl2, options="gui_debug"
+# magic_break: enabled=1
