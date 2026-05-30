@@ -7,6 +7,7 @@
 #define NCPU          32      // 最大 CPU 数
 #define NOFILE        16      // 每进程打开文件数
 #define NFILE         100     // 系统全局打开文件数
+#define NINODE        50      // 内存 inode 缓存数量
 #define MAXARG        32      // exec 最大参数数
 
 /* 内存参数 */

@@ -50,17 +50,20 @@ struct trapframe {
 #define IDT_DPL0       0x00     /* DPL = 0 (内核级) */
 #define IDT_DPL3       0x60     /* DPL = 3 (用户级) */
 
-/* 段选择子 (与 boot/stage2.S GDT 一致)
+/* 段选择子 (与 tss.c 重建的 GDT 一致，参考 mmu.h)
  * 64位长模式中断处理必须使用64位代码段 (L=1)
  * Index 0: NULL      (0x00)
- * Index 1: CODE32    (0x08) — 32位保护模式代码段
- * Index 2: DATA32    (0x10) — 32位保护模式数据段
- * Index 3: CODE64    (0x18) — 64位长模式代码段 (L=1, D=0)
- * Index 4: DATA64    (0x20) — 64位数据段 */
-#define KERN_CODE_SEL  0x18     /* 64位内核代码段选择子 (CODE64) */
-#define KERN_DATA_SEL  0x20     /* 64位内核数据段选择子 (DATA64) */
-#define USER_CODE_SEL  0x08     /* 32位代码段 (未来用户态使用不同布局) */
-#define USER_DATA_SEL  0x10     /* 32位数据段 (未来) */
+ * Index 1: CODE32    (0x08) — 32位保护模式代码段（保留兼容）
+ * Index 2: DATA32    (0x10) — 32位保护模式数据段（保留兼容）
+ * Index 3: CODE64    (0x18) — 64位长模式代码段 (L=1, D=0)，CPL=0
+ * Index 4: DATA64    (0x20) — 64位数据段，CPL=0
+ * Index 5: CODE64    (0x28) — 64位长模式代码段，CPL=3（用户态）
+ * Index 6: DATA64    (0x30) — 64位数据段，CPL=3（用户态）
+ * Index 7+8: TSS     (0x38) — 64位TSS描述符（16字节，占两个slot）
+ *
+ * 段选择子常量定义在 mmu.h 中，此处不重复定义。
+ */
+#include <mmu.h>
 
 /*---------------------------------------------------------------------------
  * 中断/异常号定义 (参考 xv6 traps.h)

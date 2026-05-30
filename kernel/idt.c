@@ -5,6 +5,8 @@
 #include <assert.h>
 #include <stdio.h>
 #include <lapic.h>
+#include <defs.h>
+#include <spinlock.h>
 #include "video.h"
 
 /*---------------------------------------------------------------------------
@@ -138,8 +140,12 @@ void trap_handler(struct trapframe *tf)
     /* IRQ 中断处理 (32+) */
     int irq = (int)(tf->trapno - T_IRQ0);
 
-    /* 时钟中断 — 仅 EOI，不打印 */
+    /* 时钟中断 — 递增 ticks，唤醒 sleep() 中等待的进程 */
     if (irq == IRQ_TIMER) {
+        acquire(&tickslock);
+        ticks++;
+        wakeup(&ticks);
+        release(&tickslock);
         lapic_eoi();
         return;
     }

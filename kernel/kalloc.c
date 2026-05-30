@@ -45,7 +45,9 @@ void kinit(BootInfo *info)
 
     /* 获取 E820 内存映射 */
     E820Entry *e820 = (E820Entry *)(uintptr_t)info->e820_addr;
-    char *kernel_end = (char *)__kernel_end;
+
+    /* __kernel_end 是高地址 VMA，转为物理地址再对齐 */
+    uint64_t kend_pa = V2P(__kernel_end);
 
     for (uint32_t i = 0; i < info->e820_count; i++) {
         if (e820[i].type != E820_USABLE)
@@ -54,9 +56,9 @@ void kinit(BootInfo *info)
         uint64_t start = e820[i].base;
         uint64_t end   = start + e820[i].length;
 
-        /* 只使用内核结束之后的内存 */
-        if (start < (uint64_t)kernel_end)
-            start = (uint64_t)PGROUNDUP(kernel_end);
+        /* 只使用内核结束之后的内存（物理地址比较）*/
+        if (start < kend_pa)
+            start = PGROUNDUP(kend_pa);
 
         /* 不超过 PHYSTOP */
         if (end > PHYSTOP)
@@ -69,10 +71,10 @@ void kinit(BootInfo *info)
         if (start >= end)
             continue;
 
-        /* 直接构建 freelist：不做 per-page memset 填充和 spinlock
-         * （Linux 在 boot 阶段也是如此，kalloc 分配时会清零页面） */
+        /* 以高地址虚拟地址（P2V）加入 freelist
+         * kalloc() 返回高地址，vm.c 中通过 V2P() 得到物理地址 */
         for (uint64_t p = end - PGSIZE; p >= start; p -= PGSIZE) {
-            struct run *r = (struct run *)(uintptr_t)p;
+            struct run *r = (struct run *)P2V(p);
             r->next = kmem.freelist;
             kmem.freelist = r;
             kmem.free_pages++;

@@ -11,6 +11,7 @@ BUILD   := build
 BOOT    := boot
 KERNEL  := kernel
 LIB     := kernel/lib
+USER    := user
 
 # Assembly flags: -target produces ELF, not PE
 AS16FLAGS := -target i386-unknown-linux-gnu -ffreestanding -nostdinc -c
@@ -20,10 +21,22 @@ CFLAGS := -target x86_64-unknown-linux-gnu \
           -m64 -std=c11 \
           -ffreestanding -fno-stack-protector \
           -fno-pic -mno-red-zone \
+          -mcmodel=large \
           -nostdlib -nostdinc \
           -I include -I . -I kernel \
           -O2 -Wall -Wextra -Wno-unused-parameter \
           -c
+
+# 用户程序编译标志（小内存模型，PIC 禁止，用户态库）
+UCFLAGS := -target x86_64-unknown-linux-gnu \
+           -m64 -std=c11 \
+           -ffreestanding -fno-stack-protector \
+           -fno-pic -mno-red-zone \
+           -mcmodel=small \
+           -nostdlib -nostdinc \
+           -I user \
+           -O2 -Wall -Wextra -Wno-unused-parameter \
+           -c
 
 # Kernel C sources
 KERNEL_C_SRCS := \
@@ -39,6 +52,20 @@ KERNEL_C_SRCS := \
     $(KERNEL)/cpu.c      \
     $(KERNEL)/pic.c      \
     $(KERNEL)/lapic.c    \
+    $(KERNEL)/vm.c       \
+    $(KERNEL)/tss.c      \
+    $(KERNEL)/proc.c      \
+    $(KERNEL)/sleeplock.c \
+    $(KERNEL)/syscall.c   \
+    $(KERNEL)/sysproc.c   \
+    $(KERNEL)/sysfile.c   \
+    $(KERNEL)/exec.c      \
+    $(KERNEL)/ide.c       \
+    $(KERNEL)/bio.c       \
+    $(KERNEL)/log.c       \
+    $(KERNEL)/fs.c        \
+    $(KERNEL)/file.c      \
+    $(KERNEL)/pipe.c      \
     $(LIB)/string.c      \
     $(LIB)/ctype.c       \
     $(LIB)/stdio.c       \
@@ -46,20 +73,32 @@ KERNEL_C_SRCS := \
 
 # Kernel assembly sources
 KERNEL_S_SRCS := \
-    $(KERNEL)/entry64.S      \
-    $(KERNEL)/trap_entry.S   \
-    $(KERNEL)/irq_vectors.S
+    $(KERNEL)/entry64.S        \
+    $(KERNEL)/trap_entry.S     \
+    $(KERNEL)/irq_vectors.S    \
+    $(KERNEL)/swtch.S          \
+    $(KERNEL)/syscall_entry.S
 
-KERNEL_C_OBJS := $(patsubst %.c, $(BUILD)/%.o, $(KERNEL_C_SRCS))
-KERNEL_S_OBJS := $(patsubst %.S, $(BUILD)/%.o, $(KERNEL_S_SRCS))
-TRAMP_OBJ     := $(BUILD)/$(KERNEL)/ap_trampoline_raw.o
+KERNEL_C_OBJS  := $(patsubst %.c, $(BUILD)/%.o, $(KERNEL_C_SRCS))
+KERNEL_S_OBJS  := $(patsubst %.S, $(BUILD)/%.o, $(KERNEL_S_SRCS))
+TRAMP_OBJ      := $(BUILD)/$(KERNEL)/ap_trampoline_raw.o
+INITCODE_OBJ   := $(BUILD)/$(KERNEL)/initcode_raw.o
+
+# 用户程序列表（添加新程序只需在此追加）
+USER_PROGS := init sh
+
+USER_ELFS  := $(patsubst %, $(BUILD)/$(USER)/%.elf, $(USER_PROGS))
+USER_BINS  := $(patsubst %, $(BUILD)/$(USER)/%, $(USER_PROGS))
+
+# 用户公共目标文件（usys.o + ulib.o）
+ULIB_OBJS := $(BUILD)/$(USER)/usys.o $(BUILD)/$(USER)/ulib.o
 
 .PHONY: all clean run debug dirs gen-irq
 
-all: dirs gen-irq $(BUILD)/os.img
+all: dirs gen-irq $(BUILD)/os.img $(BUILD)/fs.img
 
 dirs:
-	mkdir -p $(BUILD)/$(BOOT) $(BUILD)/$(KERNEL) $(BUILD)/$(LIB)
+	mkdir -p $(BUILD)/$(BOOT) $(BUILD)/$(KERNEL) $(BUILD)/$(LIB) $(BUILD)/$(USER)
 
 # Generate IRQ handler stubs from script
 gen-irq:
@@ -80,6 +119,24 @@ $(TRAMP_OBJ): $(BUILD)/trampoline.bin
 	    --rename-section .data=.trampoline,alloc,load,readonly,data,contents \
 	    $< $@
 
+# initcode: 编译为平坦二进制再嵌入内核 ELF
+$(BUILD)/$(KERNEL)/initcode.o: $(KERNEL)/initcode.S
+	$(CLANG) $(AS64FLAGS) -o $@ $<
+
+$(BUILD)/initcode.elf: $(BUILD)/$(KERNEL)/initcode.o linker/initcode.ld
+	$(LLD) -m elf_x86_64 -T linker/initcode.ld -o $@ $<
+
+$(BUILD)/initcode.bin: $(BUILD)/initcode.elf
+	$(OBJCOPY) -O binary $< $@
+
+$(INITCODE_OBJ): $(BUILD)/initcode.bin
+	$(OBJCOPY) -I binary -O elf64-x86-64 -B i386:x86-64 \
+	    --rename-section .data=.initcode,alloc,load,readonly,data,contents \
+	    --redefine-sym _binary_build_initcode_bin_start=_binary_initcode_start \
+	    --redefine-sym _binary_build_initcode_bin_end=_binary_initcode_end \
+	    --redefine-sym _binary_build_initcode_bin_size=_binary_initcode_size \
+	    $< $@
+
 # Kernel C objects (x86-64 ELF)
 $(BUILD)/$(KERNEL)/%.o: $(KERNEL)/%.c
 	$(CLANG) $(CFLAGS) -o $@ $<
@@ -92,15 +149,54 @@ $(BUILD)/$(KERNEL)/%.o: $(KERNEL)/%.S
 	$(CLANG) $(AS64FLAGS) -o $@ $<
 
 # Link kernel ELF
-$(BUILD)/kernel.elf: $(KERNEL_S_OBJS) $(KERNEL_C_OBJS) $(TRAMP_OBJ) linker/kernel.ld
+$(BUILD)/kernel.elf: $(KERNEL_S_OBJS) $(KERNEL_C_OBJS) $(TRAMP_OBJ) $(INITCODE_OBJ) linker/kernel.ld
 	$(LLD) -m elf_x86_64 -T linker/kernel.ld \
 	    -o $@ \
-	    $(KERNEL_S_OBJS) $(KERNEL_C_OBJS) $(TRAMP_OBJ)
+	    $(KERNEL_S_OBJS) $(KERNEL_C_OBJS) $(TRAMP_OBJ) $(INITCODE_OBJ)
 
 $(BUILD)/kernel.bin: $(BUILD)/kernel.elf
 	$(OBJCOPY) -O binary \
-	    -j .text -j .rodata -j .data -j .bss \
+	    -j .text -j .rodata -j .data -j .bss -j .initcode \
 	    $< $@
+
+# ============================================================
+# 用户程序构建
+# ============================================================
+
+# 用户汇编库（usys.S）
+$(BUILD)/$(USER)/usys.o: $(USER)/usys.S
+	$(CLANG) $(AS64FLAGS) -o $@ $<
+
+# 用户 C 库（ulib.c）
+$(BUILD)/$(USER)/ulib.o: $(USER)/ulib.c
+	$(CLANG) $(UCFLAGS) -o $@ $<
+
+# 用户程序 C 对象（init.c, sh.c 等）
+$(BUILD)/$(USER)/%.o: $(USER)/%.c
+	$(CLANG) $(UCFLAGS) -o $@ $<
+
+# 链接用户 ELF（-e main 作为入口）
+$(BUILD)/$(USER)/%.elf: $(BUILD)/$(USER)/%.o $(ULIB_OBJS) linker/user.ld
+	$(LLD) -m elf_x86_64 -T linker/user.ld \
+	    --entry main \
+	    -o $@ $< $(ULIB_OBJS)
+
+# 复制为不带 .elf 后缀的二进制（mkfs 用这些路径）
+$(BUILD)/$(USER)/%: $(BUILD)/$(USER)/%.elf
+	cp $< $@
+
+# ============================================================
+# mkfs: 主机工具（用本机 gcc 编译）
+# ============================================================
+$(BUILD)/mkfs: tools/mkfs.c
+	gcc -O2 -o $@ $<
+
+# ============================================================
+# fs.img: 由 mkfs 生成的文件系统镜像
+# ============================================================
+$(BUILD)/fs.img: $(BUILD)/mkfs $(USER_BINS)
+	$(BUILD)/mkfs $@ $(USER_BINS)
+	@echo "fs.img ready: $(USER_BINS)"
 
 # ============================================================
 # Disk image: single shell script to resolve circular dependency
@@ -153,19 +249,20 @@ $(BUILD)/os.img: $(BUILD)/kernel.bin linker/stage2.ld linker/stage1.ld \
 	dd if=$$BD/kernel.bin of=$@ bs=512 seek=$$KLBA conv=notrunc status=none; \
 	echo "os.img ready: stage1@0 stage2@1($$S2S s) kernel@$$KLBA($$KS s)"
 
-# Run targets
+# Run targets (两块硬盘: index=0 内核, index=1 文件系统)
 QEMU_ARGS := \
     -drive file=$(BUILD)/os.img,format=raw,index=0,media=disk \
+    -drive file=$(BUILD)/fs.img,format=raw,index=1,media=disk \
     -m 256M \
     -smp 4 \
     -vga vmware \
     -no-reboot \
     -no-shutdown
 
-run: $(BUILD)/os.img
+run: all
 	$(QEMU) $(QEMU_ARGS)
 
-debug: $(BUILD)/os.img
+debug: all
 	$(QEMU) $(QEMU_ARGS) -s -S
 
 clean:
