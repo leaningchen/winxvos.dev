@@ -6,6 +6,25 @@
  *   - GDT written at runtime to physical 0x9000; GDT ptr at 0x9028
  *   - Temp vars at 0x4000-0x400F (DS=0 absolute addressing)
  *   - 32-bit far jump hand-encoded 0x66 0xEA to avoid R_386_16 overflow
+
+ * boot/stage2.S — 第二阶段加载器
+ * 链接地址: 0x10000（实模式段 0x1000:0x0000）
+ *
+ * 执行流程:
+ *   [.code16] 实模式（DS=0x1000，段内偏移访问所有变量）:
+ *     - 保存引导驱动器号（DL）→ s2_drive
+ *     - E820 内存探测 → 0x6000
+ *     - VBE 图形模式设置（1680x1050 → 1440x900 → 800x600）
+ *     - ACPI RSDP 探测
+ *     - 填写 BootInfo（0x5000）magic/version
+ *     - 构建 GDT，进入 32 位保护模式
+ *   [.code32] 32 位保护模式:
+ *     - CPUID 长模式检查
+ *     - PIO ATA（LBA28）加载内核 → 0x100000
+ *     - 构建 4 级页表（Identity Map 前 4GB，2MB 大页）
+ *     - 进入 64 位长模式，远跳 kernel_entry@0x100000
+ *
+ * KERNEL_LBA / KERNEL_SECTORS 由 Makefile 通过 --defsym 传入
  */
 
 #ifndef KERNEL_LBA
