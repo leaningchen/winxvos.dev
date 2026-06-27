@@ -10,7 +10,7 @@ QEMU    := /mingw64/bin/qemu-system-x86_64
 BUILD   := build
 BOOT    := boot
 KERNEL  := kernel
-LIB     := kernel/lib
+LIBC    := libc
 
 # Assembly flags: -target produces ELF, not PE
 AS16FLAGS := -target i386-unknown-linux-gnu -ffreestanding -nostdinc -c
@@ -39,10 +39,10 @@ KERNEL_C_SRCS := \
     $(KERNEL)/cpu.c      \
     $(KERNEL)/pic.c      \
     $(KERNEL)/lapic.c    \
-    $(LIB)/string.c      \
-    $(LIB)/ctype.c       \
-    $(LIB)/stdio.c       \
-    $(LIB)/assert.c
+    $(LIBC)/string.c      \
+    $(LIBC)/ctype.c       \
+    $(LIBC)/stdio.c       \
+    $(LIBC)/assert.c
 
 # Kernel assembly sources
 KERNEL_S_SRCS := \
@@ -59,7 +59,7 @@ TRAMP_OBJ     := $(BUILD)/$(KERNEL)/ap_trampoline_raw.o
 all: dirs gen-irq $(BUILD)/os.img
 
 dirs:
-	mkdir -p $(BUILD)/$(BOOT) $(BUILD)/$(KERNEL) $(BUILD)/$(LIB)
+	mkdir -p $(BUILD)/$(BOOT) $(BUILD)/$(KERNEL) $(BUILD)/$(LIBC)
 
 # Generate IRQ handler stubs from script
 gen-irq:
@@ -84,7 +84,7 @@ $(TRAMP_OBJ): $(BUILD)/trampoline.bin
 $(BUILD)/$(KERNEL)/%.o: $(KERNEL)/%.c
 	$(CLANG) $(CFLAGS) -o $@ $<
 
-$(BUILD)/$(LIB)/%.o: $(LIB)/%.c
+$(BUILD)/$(LIBC)/%.o: $(LIBC)/%.c
 	$(CLANG) $(CFLAGS) -o $@ $<
 
 # Kernel 64-bit assembly objects
