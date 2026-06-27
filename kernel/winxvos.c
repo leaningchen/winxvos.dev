@@ -81,7 +81,7 @@ const char* default_banner_text_s[] = {
 "\0"
 };
 
-const char* default_banner_text_s[] = {
+const char* default_banner_text_o[] = {
 "                                                                                   \n",
 "                   ███░                                                            \n",
 "                                                                                   \n",
