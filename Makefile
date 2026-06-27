@@ -28,17 +28,16 @@ CFLAGS := -target x86_64-unknown-linux-gnu \
 # Kernel C sources
 KERNEL_C_SRCS := \
     $(KERNEL)/main.c     \
-    $(KERNEL)/video.c    \
-    $(KERNEL)/acpi.c     \
-    $(KERNEL)/smp.c      \
-    $(KERNEL)/font.c     \
-    $(KERNEL)/kalloc.c   \
-    $(KERNEL)/spinlock.c \
-    $(KERNEL)/idt.c      \
+    $(KERNEL)/drivers/video/video.c    \
+    $(KERNEL)/arch/x86_64/acpi.c     \
+    $(KERNEL)/arch/x86_64/smp.c      \
+    $(KERNEL)/drivers/video/font.c     \
+    $(KERNEL)/arch/x86_64/kalloc.c   \
+    $(KERNEL)/arch/x86_64/spinlock.c \
+    $(KERNEL)/arch/x86_64/idt.c      \
     $(KERNEL)/panic.c    \
-    $(KERNEL)/cpu.c      \
-    $(KERNEL)/pic.c      \
-    $(KERNEL)/lapic.c    \
+    $(KERNEL)/arch/x86_64/pic.c      \
+    $(KERNEL)/arch/x86_64/lapic.c    \
 	$(KERNEL)/message.c   \
 	$(KERNEL)/winxvos.c   \
     $(LIBC)/string.c      \
@@ -48,30 +47,30 @@ KERNEL_C_SRCS := \
 
 # Kernel assembly sources
 KERNEL_S_SRCS := \
-    $(KERNEL)/entry64.S      \
-    $(KERNEL)/trap_entry.S   \
-    $(KERNEL)/irq_vectors.S
+    $(KERNEL)/arch/x86_64/entry64.S      \
+    $(KERNEL)/arch/x86_64/trap_entry.S   \
+    $(KERNEL)/arch/x86_64/irq_vectors.S
 
 KERNEL_C_OBJS := $(patsubst %.c, $(BUILD)/%.o, $(KERNEL_C_SRCS))
 KERNEL_S_OBJS := $(patsubst %.S, $(BUILD)/%.o, $(KERNEL_S_SRCS))
-TRAMP_OBJ     := $(BUILD)/$(KERNEL)/ap_trampoline_raw.o
+TRAMP_OBJ     := $(BUILD)/$(KERNEL)/arch/x86_64/ap_trampoline_raw.o
 
 .PHONY: all clean run debug dirs gen-irq
 
 all: dirs gen-irq $(BUILD)/os.img
 
 dirs:
-	mkdir -p $(BUILD)/$(BOOT) $(BUILD)/$(KERNEL) $(BUILD)/$(LIBC)
+	mkdir -p $(BUILD)/$(BOOT) $(BUILD)/$(KERNEL)/arch/x86_64 $(BUILD)/$(KERNEL)/drivers/video $(BUILD)/$(LIBC)
 
 # Generate IRQ handler stubs from script
 gen-irq:
-	python3 tools/gen_irq_vectors.py $(KERNEL)/irq_vectors.S
+	python3 tools/gen_irq_vectors.py $(KERNEL)/arch/x86_64/irq_vectors.S
 
 # AP trampoline (i386 ELF)
-$(BUILD)/$(KERNEL)/ap_trampoline.o: $(KERNEL)/ap_trampoline.S
+$(BUILD)/$(KERNEL)/arch/x86_64/ap_trampoline.o: $(KERNEL)/arch/x86_64/ap_trampoline.S
 	$(CLANG) $(AS16FLAGS) -o $@ $<
 
-$(BUILD)/trampoline.elf: $(BUILD)/$(KERNEL)/ap_trampoline.o linker/trampoline.ld
+$(BUILD)/trampoline.elf: $(BUILD)/$(KERNEL)/arch/x86_64/ap_trampoline.o linker/trampoline.ld
 	$(LLD) -m elf_i386 -T linker/trampoline.ld -o $@ $<
 
 $(BUILD)/trampoline.bin: $(BUILD)/trampoline.elf

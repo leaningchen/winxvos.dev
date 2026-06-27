@@ -1,17 +1,17 @@
 #include <types.h>
 #include <bootinfo.h>
-#include <e820.h>
+#include <arch/x86_64/e820.h>
 #include <libc.h>
-#include <kalloc.h>
+#include <arch/x86_64/kalloc.h>
 #include <defs.h>
 #include <param.h>
-#include <x86_64.h>
-#include <pic.h>
-#include <lapic.h>
+#include <arch/x86_64/x86_64.h>
+#include <arch/x86_64/pic.h>
+#include <arch/x86_64/lapic.h>
 #include <defs.h>
 #include <message.h>
-#include "video.h"
-#include "smp.h"
+#include <drivers/video/video.h>
+#include <arch/x86_64/smp.h>
 
 /*===========================================================================
  * kernel_main — C 语言内核主函数
