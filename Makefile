@@ -3,9 +3,9 @@
 # MSYS2 GNU as/ld only supports PE/COFF; Clang -target generates ELF
 
 CLANG   := /usr/bin/clang
-LLD     := /usr/bin/ld.lld.exe
-OBJCOPY := /usr/bin/llvm-objcopy.exe
-QEMU    := /mingw64/bin/qemu-system-x86_64
+LLD     := /usr/bin/ld.lld
+OBJCOPY := /usr/bin/llvm-objcopy
+QEMU    := /usr/bin/qemu-system-x86_64
 
 BUILD   := build
 BOOT    := boot
@@ -22,24 +22,28 @@ CFLAGS := -target x86_64-unknown-linux-gnu \
           -fno-pic -mno-red-zone \
           -nostdlib -nostdinc \
           -I libc -I . -I kernel \
+          -I kernel/arch/x86_64 \
+          -I kernel/drivers/video \
+          -I kernel/drivers/fs \
           -O2 -Wall -Wextra -Wno-unused-parameter \
           -c
 
 # Kernel C sources
 KERNEL_C_SRCS := \
     $(KERNEL)/main.c     \
-    $(KERNEL)/drivers/video/video.c    \
+    $(KERNEL)/arch/x86_64/cpu.c      \
     $(KERNEL)/arch/x86_64/acpi.c     \
     $(KERNEL)/arch/x86_64/smp.c      \
-    $(KERNEL)/drivers/video/font.c     \
     $(KERNEL)/arch/x86_64/kalloc.c   \
     $(KERNEL)/arch/x86_64/spinlock.c \
     $(KERNEL)/arch/x86_64/idt.c      \
-    $(KERNEL)/panic.c    \
     $(KERNEL)/arch/x86_64/pic.c      \
     $(KERNEL)/arch/x86_64/lapic.c    \
-	$(KERNEL)/message.c   \
-	$(KERNEL)/winxvos.c   \
+    $(KERNEL)/drivers/video/video.c  \
+    $(KERNEL)/drivers/video/font.c   \
+    $(KERNEL)/panic.c    \
+    $(KERNEL)/message.c   \
+    $(KERNEL)/winxvos.c   \
     $(LIBC)/string.c      \
     $(LIBC)/ctype.c       \
     $(LIBC)/stdio.c       \
@@ -60,7 +64,7 @@ TRAMP_OBJ     := $(BUILD)/$(KERNEL)/arch/x86_64/ap_trampoline_raw.o
 all: dirs gen-irq $(BUILD)/os.img
 
 dirs:
-	mkdir -p $(BUILD)/$(BOOT) $(BUILD)/$(KERNEL)/arch/x86_64 $(BUILD)/$(KERNEL)/drivers/video $(BUILD)/$(LIBC)
+	mkdir -p $(BUILD)/$(BOOT) $(BUILD)/$(KERNEL)/arch/x86_64 $(BUILD)/$(KERNEL)/drivers/video $(BUILD)/$(KERNEL)/drivers/fs $(BUILD)/$(LIBC)
 
 # Generate IRQ handler stubs from script
 gen-irq:
