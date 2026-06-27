@@ -78,11 +78,12 @@ void kernel_main(BootInfo *info)
             default:            type_name = "Unknown";          type_color = COLOR_GRAY;   break;
             }
 
+            void* e820_start_address = 0;
             uint64_t len = e820[i].length;
             if (len >= 1024ULL * 1024ULL) {
-                kprintf("  %p - %p  ", e820[i].base, e820[i].base + len);
+                kprintf("  %p, LENGTH = %p  ", e820[i].base, e820_start_address + len);
             } else {
-                kprintf("  %p - %p  ", e820[i].base, e820[i].base + len);
+                kprintf("  %p, LENGTH = %p  ", e820[i].base, e820_start_address + len);
             }
             kprintf_color(type_color, "%s\n", type_name);
         }

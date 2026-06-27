@@ -21,7 +21,7 @@ CFLAGS := -target x86_64-unknown-linux-gnu \
           -ffreestanding -fno-stack-protector \
           -fno-pic -mno-red-zone \
           -nostdlib -nostdinc \
-          -I include -I . -I kernel \
+          -I libc -I . -I kernel \
           -O2 -Wall -Wextra -Wno-unused-parameter \
           -c
 
