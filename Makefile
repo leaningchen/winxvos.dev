@@ -5,7 +5,7 @@
 CLANG   := /usr/bin/clang
 LLD     := /usr/bin/ld.lld
 OBJCOPY := /usr/bin/llvm-objcopy
-QEMU    := /usr/bin/qemu-system-x86_64
+QEMU    := /mingw64/bin/qemu-system-x86_64
 
 BUILD   := build
 BOOT    := boot
@@ -177,4 +177,4 @@ debug: $(BUILD)/os.img
 
 clean:
 	rm -rf $(BUILD)
-	rm -f $(KERNEL)/irq_vectors.S
+	rm -f $(KERNEL)/arch/x86_64/irq_vectors.S
