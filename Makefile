@@ -4,7 +4,7 @@
 
 CLANG   := /usr/bin/clang
 LLD     := /usr/bin/ld.lld.exe
-OBJCOPY := /usr/bin/objcopy.exe
+OBJCOPY := /usr/bin/llvm-objcopy.exe
 QEMU    := /mingw64/bin/qemu-system-x86_64
 
 BUILD   := build
@@ -156,10 +156,8 @@ $(BUILD)/os.img: $(BUILD)/kernel.bin boot/setup.ld boot/boot.ld \
 # Run targets
 QEMU_ARGS := \
     -drive file=$(BUILD)/os.img,format=raw,index=0,media=disk \
-    -m 512M \
-    -accel tcg \
+    -m 1024M -accel tcg -smp 4 \
     -cpu Nehalem-v2,-spec-ctrl \
-    -smp 4 \
     -vga vmware \
     -serial mon:stdio \
     -no-reboot \
