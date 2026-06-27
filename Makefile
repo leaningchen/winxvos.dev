@@ -161,13 +161,12 @@ $(BUILD)/os.img: $(BUILD)/kernel.bin boot/setup.ld boot/boot.ld \
 # Run targets
 QEMU_ARGS := \
     -drive file=$(BUILD)/os.img,format=raw,index=0,media=disk \
-    -m 1024M -accel tcg -smp 4 \
-    -cpu Nehalem-v2,-spec-ctrl \
+    -m 512M \
+    -smp 4 \
     -vga vmware \
-    -serial mon:stdio \
     -no-reboot \
     -no-shutdown \
-    -display sdl
+	--display sdl
 
 run: $(BUILD)/os.img
 	$(QEMU) $(QEMU_ARGS)
