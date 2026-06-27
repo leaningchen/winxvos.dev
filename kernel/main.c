@@ -9,6 +9,7 @@
 #include <pic.h>
 #include <lapic.h>
 #include <defs.h>
+#include <message.h>
 #include "video.h"
 #include "smp.h"
 
@@ -30,6 +31,7 @@ void kernel_main(zenith_boot_info *info)
 
     /* 3. Banner */
     kprintf_color(COLOR_CYAN, "  WinixOS v2.0\n");
+    show_banner_message(winxvos_banner_text);
     kprintf("----------------------------------------\n");
 
     /* 4. 显示分辨率 */

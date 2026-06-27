@@ -39,6 +39,8 @@ KERNEL_C_SRCS := \
     $(KERNEL)/cpu.c      \
     $(KERNEL)/pic.c      \
     $(KERNEL)/lapic.c    \
+	$(KERNEL)/message.c   \
+	$(KERNEL)/winxvos.c   \
     $(LIBC)/string.c      \
     $(LIBC)/ctype.c       \
     $(LIBC)/stdio.c       \
