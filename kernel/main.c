@@ -80,9 +80,9 @@ void kernel_main(BootInfo *info)
 
             uint64_t len = e820[i].length;
             if (len >= 1024ULL * 1024ULL) {
-                kprintf("  %p + %lu MB  ", e820[i].base, len / (1024ULL * 1024ULL));
+                kprintf("  %p - %p  ", e820[i].base, e820[i].base + len);
             } else {
-                kprintf("  %p + %lu KB  ", e820[i].base, len / 1024ULL);
+                kprintf("  %p - %p  ", e820[i].base, e820[i].base + len);
             }
             kprintf_color(type_color, "%s\n", type_name);
         }

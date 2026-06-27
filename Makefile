@@ -156,7 +156,7 @@ $(BUILD)/os.img: $(BUILD)/kernel.bin boot/setup.ld boot/boot.ld \
 # Run targets
 QEMU_ARGS := \
     -drive file=$(BUILD)/os.img,format=raw,index=0,media=disk \
-    -m 256M \
+    -m 512M \
     -smp 4 \
     -vga vmware \
     -no-reboot \
