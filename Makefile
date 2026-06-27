@@ -105,7 +105,7 @@ $(BUILD)/kernel.bin: $(BUILD)/kernel.elf
 # ============================================================
 # Disk image: single shell script to resolve circular dependency
 # ============================================================
-$(BUILD)/os.img: $(BUILD)/kernel.bin linker/setup.ld linker/boot.ld \
+$(BUILD)/os.img: $(BUILD)/kernel.bin boot/setup.ld boot/boot.ld \
                  $(BOOT)/setup.S $(BOOT)/boot.S
 	@set -e; \
 	CL="$(CLANG)"; LD="$(LLD)"; OC="$(OBJCOPY)"; \
@@ -113,7 +113,7 @@ $(BUILD)/os.img: $(BUILD)/kernel.bin linker/setup.ld linker/boot.ld \
 	echo "=== Building setup pass 1 (placeholder) ==="; \
 	$$CL $(AS16FLAGS) -DKERNEL_LBA=65 -DKERNEL_SECTORS=256 \
 	    -o $$BD/$$BT/setup.o $(BOOT)/setup.S; \
-	$$LD -m elf_i386 -T linker/setup.ld \
+	$$LD -m elf_i386 -T boot/setup.ld \
 	    -o $$BD/setup.elf $$BD/$$BT/setup.o; \
 	$$OC -O binary -j .text -j .rodata -j .data \
 	    $$BD/setup.elf $$BD/setup.bin; \
@@ -130,7 +130,7 @@ $(BUILD)/os.img: $(BUILD)/kernel.bin linker/setup.ld linker/boot.ld \
 	echo "=== Building boot ==="; \
 	$$CL $(AS16FLAGS) -DSTAGE2_SECTORS=$$S2S \
 	    -o $$BD/$$BT/boot.o $(BOOT)/boot.S; \
-	$$LD -m elf_i386 -T linker/boot.ld \
+	$$LD -m elf_i386 -T boot/boot.ld \
 	    -o $$BD/boot.elf $$BD/$$BT/boot.o; \
 	$$OC -O binary $$BD/boot.elf $$BD/boot.bin; \
 	S1SZ=$$(wc -c < $$BD/boot.bin); \
@@ -142,7 +142,7 @@ $(BUILD)/os.img: $(BUILD)/kernel.bin linker/setup.ld linker/boot.ld \
 	echo "=== Building setup pass 2 (KERNEL_LBA=$$KLBA KERNEL_SECTORS=$$KS) ==="; \
 	$$CL $(AS16FLAGS) -DKERNEL_LBA=$$KLBA -DKERNEL_SECTORS=$$KS \
 	    -o $$BD/$$BT/setup.o $(BOOT)/setup.S; \
-	$$LD -m elf_i386 -T linker/setup.ld \
+	$$LD -m elf_i386 -T boot/setup.ld \
 	    -o $$BD/setup.elf $$BD/$$BT/setup.o; \
 	$$OC -O binary -j .text -j .rodata -j .data \
 	    $$BD/setup.elf $$BD/setup.bin; \

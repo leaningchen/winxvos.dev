@@ -72,7 +72,7 @@ void __font_initialize__() {
 }
 
 unsigned short* bitmap(char value) {
-    int sacii = value > 0 && value < font->glyphs;
+    int sacii = value > 0 && value < (int)font->glyphs;
     unsigned short* glyph = 
         (unsigned short*)(ZAP_LIGHT_FONT_BUFFER + 
         font->offset + (sacii ? value : 0) * font->bytes);
