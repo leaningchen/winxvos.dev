@@ -2,7 +2,7 @@
 #define __DEFS_H__
 
 #include <types.h>
-#include <acpi.h>
+#include <arch/x86_64/acpi.h>
 #include <bootinfo.h>
 
 /* 前置类型声明 (避免头文件循环依赖) */

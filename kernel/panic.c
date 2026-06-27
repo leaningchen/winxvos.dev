@@ -1,7 +1,7 @@
 #include <types.h>
-#include <x86_64.h>
+#include <arch/x86_64/x86_64.h>
 #include <string.h>
-#include "video.h"
+#include <drivers/video/video.h>
 
 /*---------------------------------------------------------------------------
  * panic — 内核致命错误处理
