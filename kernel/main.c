@@ -1,5 +1,5 @@
 #include <types.h>
-#include <boot_info.h>
+#include <bootinfo.h>
 #include <e820.h>
 #include <libc.h>
 #include <kalloc.h>
@@ -8,16 +8,17 @@
 #include <x86_64.h>
 #include <pic.h>
 #include <lapic.h>
+#include <defs.h>
 #include "video.h"
 #include "smp.h"
 
 /*===========================================================================
  * kernel_main — C 语言内核主函数
- * 由 entry64.S 调用，参数 info 指向物理地址 0x5000 的 BootInfo
+ * 由 entry64.S 调用，参数 info 指向物理地址 0x5000 的 zenith_boot_info
  *===========================================================================*/
-void kernel_main(BootInfo *info)
+void kernel_main(zenith_boot_info *info)
 {
-    /* 1. 校验 BootInfo magic */
+    /* 1. 校验 zenith_boot_info magic */
     if (info->magic != BOOT_INFO_MAGIC) {
         while (1) hlt();
     }
@@ -88,6 +89,10 @@ void kernel_main(BootInfo *info)
             kprintf_color(type_color, "%s\n", type_name);
         }
     }
+
+    ACPI_RSDP* _ACPI_RSDP = (ACPI_RSDP*)(info->acpi_rsdp_addr);
+    kprintf_color(COLOR_YELLOW, "\nRSDP SIGN == %s\n", _ACPI_RSDP->signature);
+    kprintf_color(COLOR_YELLOW, "\nRSDP SIGN == %d\n", _ACPI_RSDP->revision);
 
     /* 9. SMP 初始化 */
     kprintf_color(COLOR_YELLOW, "\nInitializing SMP...\n");

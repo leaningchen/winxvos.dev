@@ -1,5 +1,5 @@
 #include <types.h>
-#include <boot_info.h>
+#include <bootinfo.h>
 #include <string.h>
 #include "smp.h"
 #include "acpi.h"
@@ -69,7 +69,7 @@ static void spin_pause(uint32_t n)
  *   5. 若 AP 未全部上线，再发一次 SIPI
  *   6. 纯自旋等待 cpu_count 达到预期（最多 2000 万次 pause ≈ 若干毫秒）
  *---------------------------------------------------------------------------*/
-int smp_init(BootInfo *info)
+int smp_init(zenith_boot_info *info)
 {
     /* 初始化 ACPI */
     acpi_init(info->acpi_rsdp_addr);

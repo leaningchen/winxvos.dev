@@ -46,7 +46,7 @@
 
 /*
  * video_init — 初始化帧缓冲和 PSF2 字体
- * @addr:  LFB 物理地址（来自 BootInfo.fb_addr）
+ * @addr:  LFB 物理地址（来自 zenith_boot_info.fb_addr）
  * @w:     水平分辨率（像素）
  * @h:     垂直分辨率（像素）
  * @pitch: 每行字节数（可能大于 w*4，存在行填充）

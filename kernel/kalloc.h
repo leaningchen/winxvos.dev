@@ -2,9 +2,9 @@
 #define __KALLOC_H__
 
 #include <types.h>
-#include <boot_info.h>
+#include <bootinfo.h>
 
-void kinit(BootInfo *info);     /* 初始化分配器 (从 E820 可用区域) */
+void kinit(zenith_boot_info *info);     /* 初始化分配器 (从 E820 可用区域) */
 void *kalloc(void);             /* 分配一个 4096 字节物理页 */
 void kfree(void *v);            /* 释放一个物理页 */
 uint64_t kmem_free_pages(void); /* 返回空闲页数 */

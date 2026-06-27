@@ -6,7 +6,7 @@
  *   1. 更新所有段寄存器到 64 位数据段
  *   2. 建立 BSP 内核栈（栈顶 0x580000）
  *   3. 清零 BSS 段
- *   4. 调用 kernel_main(BootInfo *)
+ *   4. 调用 kernel_main(zenith_boot_info *)
  */
 
     .section .text.entry, "ax"
@@ -46,9 +46,9 @@ kernel_entry:
     xorq    %rax,         %rax
     rep stosq
 
-    /* 调用 C 主函数 kernel_main(BootInfo *info)
+    /* 调用 C 主函数 kernel_main(zenith_boot_info *info)
      * System V AMD64 ABI: 第一参数通过 RDI 传递
-     * BootInfo 固定在物理地址 0x5000
+     * zenith_boot_info 固定在物理地址 0x5000
      */
     movq    $0x5000, %rdi
     call    kernel_main

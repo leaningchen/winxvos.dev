@@ -8,7 +8,7 @@
 #define E820_BUFFER_ADDR 0x6000U      /* E820 数组物理地址 */
 
 /*
- * BootInfo 结构体 — 固定存放于物理地址 0x5000
+ * zenith_boot_info 结构体 — 固定存放于物理地址 0x5000
  * Stage2 汇编代码按偏移写入各字段，C 代码通过结构体指针访问。
  * 字段偏移必须与 boot/stage2.S 中的 .equ 常量严格对应。
  */
@@ -27,6 +27,6 @@ typedef struct {
     uint64_t acpi_rsdp_addr;  /* +0x30  ACPI RSDP 物理地址 */
     uint32_t boot_drive;      /* +0x38  BIOS 引导驱动器号 */
     uint32_t cpu_count;       /* +0x3C  CPU 逻辑核心总数（含 BSP）*/
-} __attribute__((packed)) BootInfo;
+} __attribute__((packed)) zenith_boot_info;
 
 #endif /* __BOOT_INFO_H__ */

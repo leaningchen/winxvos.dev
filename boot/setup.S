@@ -16,7 +16,7 @@
  *     - E820 内存探测 → 0x6000
  *     - VBE 图形模式设置（1680x1050 → 1440x900 → 800x600）
  *     - ACPI RSDP 探测
- *     - 填写 BootInfo（0x5000）magic/version
+ *     - 填写 zenith_boot_info（0x5000）magic/version
  *     - 构建 GDT，进入 32 位保护模式
  *   [.code32] 32 位保护模式:
  *     - CPUID 长模式检查

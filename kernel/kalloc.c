@@ -4,7 +4,7 @@
 #include <kalloc.h>
 #include <spinlock.h>
 #include <memlayout.h>
-#include <boot_info.h>
+#include <bootinfo.h>
 #include <e820.h>
 #include <assert.h>
 #include <stdio.h>
@@ -37,7 +37,7 @@ struct {
  * 不使用 spinlock（此时只有 BSP 单核运行，无需锁保护）。
  * kalloc() 分配时会清零页面，确保分配的内存是干净的。
  *---------------------------------------------------------------------------*/
-void kinit(BootInfo *info)
+void kinit(zenith_boot_info *info)
 {
     initlock(&kmem.lock, "kmem");
     kmem.freelist   = NULL;

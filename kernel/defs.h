@@ -2,16 +2,16 @@
 #define __DEFS_H__
 
 #include <types.h>
-#include <boot_info.h>
+#include <acpi.h>
+#include <bootinfo.h>
 
 /* 前置类型声明 (避免头文件循环依赖) */
 struct spinlock;
 struct trapframe;
 struct cpu;
-typedef struct ACPI_Header ACPI_Header;
 
 /* kalloc.c */
-void  kinit(BootInfo *info);
+void  kinit(zenith_boot_info *info);
 void *kalloc(void);
 void  kfree(void *);
 
@@ -42,7 +42,7 @@ void video_print(const char *, uint32_t);
 void video_print_at(int, int, const char *, uint32_t);
 
 /* smp.c */
-int  smp_init(BootInfo *);
+int  smp_init(zenith_boot_info *);
 int  smp_cpu_count(void);
 
 /* acpi.c */
