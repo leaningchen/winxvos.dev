@@ -31,7 +31,7 @@ void kernel_main(zenith_boot_info *info)
 
     /* 3. Banner */
     kprintf_color(COLOR_CYAN, "  WinixOS v2.0\n");
-    show_banner_message(winxvos_banner_text);
+    show_banner_message(default_banner_text_o);
     kprintf("----------------------------------------\n");
 
     /* 4. 显示分辨率 */

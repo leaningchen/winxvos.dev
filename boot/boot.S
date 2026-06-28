@@ -20,9 +20,9 @@
 
 _start:
     /* 规范化 CS:IP = 0x0000:0x7C00 */
-    ljmp $0x0000, $real_start
+    ljmp $0x0000, $entrance
 
-real_start:
+entrance:
     /* 关中断，清方向标志 */
     cli
     cld
@@ -86,7 +86,7 @@ print_char:
 /* --------------------------------------------------------
  * DAP（Disk Address Packet）— 16 字节，用于 INT 13h/42h
  * -------------------------------------------------------- */
-    .balign 16              /* 强制 16 字节对齐，规避现代 CSM 的 Block I/O 模拟 Bug */
+    .balign 16                  /* 强制 16 字节对齐，规避现代 CSM 的 Block I/O 模拟 Bug */
 dap:
     .byte   0x10                /* DAP 大小 = 16 字节 */
     .byte   0x00                /* 保留 */
