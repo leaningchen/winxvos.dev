@@ -1,21 +1,25 @@
-/*
- * kernel/entry64.S — BSP（Bootstrap Processor）64 位入口
- * 链接地址: 0x100000（由 linker/kernel.ld 中 .text.entry 段保证最先）
+/* ============================================================================
+ * kernel/entry64.S — BSP 64 位长模式入口
+ * 链接地址: 0xFFFF800000100000
  *
- * 功能:
- *   1. 更新所有段寄存器到 64 位数据段
- *   2. 建立 BSP 内核栈（栈顶 0x580000）
- *   3. 清零 BSS 段
- *   4. 调用 kernel_main(zenith_boot_info *)
- */
+ * 已由 setup.S 完成：
+ *   - 高半核页表映射
+ *   - FPU/SSE/AVX 启用
+ *   - SMEP/SMAP/NX 安全特性开启
+ *   - 引导信息指针通过 RDI 传递 (HHDM + BOOT_INFO)
+ * ============================================================================ */
 
     .section .text.entry, "ax"
     .code64
     .global kernel_entry
 
+.equ HHDM_OFFSET,    0xFFFF800000000000
+.equ BSP_STACK_PHYS, 0x580000
+.equ BOOT_INFO_PHYS, 0x5000
+
 kernel_entry:
-    /* 更新数据段寄存器到 64 位数据段（选择子 0x20）*/
-    movw    $0x20, %ax
+    /* 1. 段寄存器刷新 (防御性编程) */
+    movw    $0x20, %ax              /* 64位数据段选择子 */
     movw    %ax, %ds
     movw    %ax, %es
     movw    %ax, %ss
@@ -23,37 +27,25 @@ kernel_entry:
     movw    %ax, %fs
     movw    %ax, %gs
 
-    /* 启用 SSE/SSE2（clang -O2 可能生成 SIMD 指令）
-     * CR4.OSFXSR(bit9)=1, CR4.OSXMMEXCPT(bit10)=1
-     * CR0.EM(bit2)=0, CR0.MP(bit1)=1 */
-    movq    %cr0, %rax
-    andq    $~(1<<2), %rax      /* clear CR0.EM */
-    orq     $(1<<1), %rax       /* set   CR0.MP */
-    movq    %rax, %cr0
-    movq    %cr4, %rax
-    orq     $(3<<9), %rax       /* set CR4.OSFXSR | CR4.OSXMMEXCPT */
-    movq    %rax, %cr4
+    cld                             /* 字符串操作正向递增 */
 
-    /* 建立 BSP 内核栈，16 字节对齐 */
-    movq    $0x580000, %rsp
+    /* 2. 硬件状态无需重复配置 (FPU/SSE/AVX/安全特性已由 setup.S 完成) */
+
+    /* 3. 建立高半核内核栈，16 字节对齐 */
+    movabs  $(HHDM_OFFSET + BSP_STACK_PHYS), %rsp
     andq    $~0xF, %rsp
 
-    /* 清零 BSS 段（REP STOSQ：8 字节/次）*/
-    movq    $__bss_start, %rdi
-    movq    $__bss_end,   %rcx
-    subq    %rdi,         %rcx
-    shrq    $3,           %rcx         /* 转换为 qword 计数 */
-    xorq    %rax,         %rax
-    rep stosq
+    /* 4. 清零 BSS 段 (按字节，避免对齐问题) */
+    lea     __bss_start(%rip), %rdi
+    lea     __bss_end(%rip), %rsi
+    subq    %rdi, %rsi              /* rsi = 字节数 */
+    movq    %rsi, %rcx
+    xorl    %eax, %eax              /* rax = 0 */
+    rep stosb
 
-    /* 调用 C 主函数 kernel_main(zenith_boot_info *info)
-     * System V AMD64 ABI: 第一参数通过 RDI 传递
-     * zenith_boot_info 固定在物理地址 0x5000
-     */
-    movq    $0x5000, %rdi
-    call    kernel_main
+    /* 5. RDI 已由 setup.S 设为 HHDM + BOOT_INFO，直接调用 C 入口 */
+    call    zenith_entrance_main
 
-    /* 若 kernel_main 意外返回，永久挂起 */
 .Lhalt:
     cli
     hlt

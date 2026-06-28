@@ -14,10 +14,10 @@
 #include <arch/x86_64/smp.h>
 
 /*===========================================================================
- * kernel_main — C 语言内核主函数
+ * zenith_entrance_main — C 语言内核主函数
  * 由 entry64.S 调用，参数 info 指向物理地址 0x5000 的 zenith_boot_info
  *===========================================================================*/
-void kernel_main(zenith_boot_info *info)
+void zenith_entrance_main(zenith_boot_info *info)
 {
     /* 1. 校验 zenith_boot_info magic */
     if (info->magic != BOOT_INFO_MAGIC) {

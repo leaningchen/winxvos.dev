@@ -1,6 +1,6 @@
 # WinixOS Makefile
 # Toolchain: Clang (ELF output) + LLD (ELF linker)
-# MSYS2 GNU as/ld only supports PE/COFF; Clang -target generates ELF
+# 架构师注: 针对高半核 (Higher Half) 与 Freestanding 环境进行了深度优化
 
 CLANG   := /usr/bin/clang
 LLD     := /usr/bin/ld.lld
@@ -12,14 +12,25 @@ BOOT    := boot
 KERNEL  := kernel
 LIBC    := libc
 
-# Assembly flags: -target produces ELF, not PE
-AS16FLAGS := -target i386-unknown-linux-gnu -ffreestanding -nostdinc -c
-AS64FLAGS := -target x86_64-unknown-linux-gnu -ffreestanding -nostdinc -c
+# ============================================================================
+# 编译与汇编标志 (核心架构配置)
+# ============================================================================
 
+# 16位/32位实模式/保护模式汇编标志 (用于 Bootloader)
+AS16FLAGS := -target i386-unknown-linux-gnu -ffreestanding -nostdinc -c
+
+# 64位长模式汇编标志
+# 架构师修复: 必须添加 -mcmodel=large，否则汇编中的绝对地址引用 (如 movq $sym, %rax) 
+# 会在链接时触发与 C 代码相同的 R_X86_64_32S 溢出错误。
+AS64FLAGS := -target x86_64-unknown-linux-gnu -ffreestanding -nostdinc -mcmodel=large -c
+
+# 64位 C 语言内核编译标志
 CFLAGS := -target x86_64-unknown-linux-gnu \
           -m64 -std=c11 \
           -ffreestanding -fno-stack-protector \
-          -fno-pic -mno-red-zone \
+          -mcmodel=large -fno-pic -fno-pie \
+          -mno-red-zone \
+          -mno-sse -mno-sse2 -mno-mmx -mno-avx -mno-80387 \
           -nostdlib -nostdinc \
           -I libc -I . -I kernel \
           -I kernel/arch/x86_64 \
@@ -27,6 +38,10 @@ CFLAGS := -target x86_64-unknown-linux-gnu \
           -I kernel/drivers/fs \
           -O2 -Wall -Wextra -Wno-unused-parameter \
           -c
+
+# ============================================================================
+# 源文件定义
+# ============================================================================
 
 # Kernel C sources
 KERNEL_C_SRCS := \
@@ -68,9 +83,12 @@ dirs:
 
 # Generate IRQ handler stubs from script
 gen-irq:
-	python3 tools/gen_irq_vectors.py $(KERNEL)/arch/x86_64/irq_vectors.S
+	python3 tools/gen_irq_vectors.py $(KERNEL)/arch/x86_64/irq_vectors.S || python tools/gen_irq_vectors.py $(KERNEL)/arch/x86_64/irq_vectors.S
 
-# AP trampoline (i386 ELF)
+# ============================================================================
+# AP Trampoline 构建 (16位 -> 32位 ELF -> 纯二进制 -> 64位 ELF 对象)
+# ============================================================================
+
 $(BUILD)/$(KERNEL)/arch/x86_64/ap_trampoline.o: $(KERNEL)/arch/x86_64/ap_trampoline.S
 	$(CLANG) $(AS16FLAGS) -o $@ $<
 
@@ -85,18 +103,23 @@ $(TRAMP_OBJ): $(BUILD)/trampoline.bin
 	    --rename-section .data=.trampoline,alloc,load,readonly,data,contents \
 	    $< $@
 
-# Kernel C objects (x86-64 ELF)
+# ============================================================================
+# 内核对象编译
+# ============================================================================
+
 $(BUILD)/$(KERNEL)/%.o: $(KERNEL)/%.c
 	$(CLANG) $(CFLAGS) -o $@ $<
 
 $(BUILD)/$(LIBC)/%.o: $(LIBC)/%.c
 	$(CLANG) $(CFLAGS) -o $@ $<
 
-# Kernel 64-bit assembly objects
 $(BUILD)/$(KERNEL)/%.o: $(KERNEL)/%.S
 	$(CLANG) $(AS64FLAGS) -o $@ $<
 
-# Link kernel ELF
+# ============================================================================
+# 内核链接
+# ============================================================================
+
 $(BUILD)/kernel.elf: $(KERNEL_S_OBJS) $(KERNEL_C_OBJS) $(TRAMP_OBJ) linker/kernel.ld
 	$(LLD) -m elf_x86_64 -T linker/kernel.ld \
 	    -o $@ \
@@ -107,9 +130,11 @@ $(BUILD)/kernel.bin: $(BUILD)/kernel.elf
 	    -j .text -j .rodata -j .data -j .bss \
 	    $< $@
 
-# ============================================================
-# Disk image: single shell script to resolve circular dependency
-# ============================================================
+# ============================================================================
+# 磁盘镜像构建 (Bootloader + Setup + Kernel)
+# 架构师注: 您使用 echo 去除 wc -c 前导空格的 workaround 非常精妙，完美兼容 MSYS2
+# ============================================================================
+
 $(BUILD)/os.img: $(BUILD)/kernel.bin boot/setup.ld boot/boot.ld \
                  $(BOOT)/setup.S $(BOOT)/boot.S
 	@set -e; \
@@ -158,7 +183,10 @@ $(BUILD)/os.img: $(BUILD)/kernel.bin boot/setup.ld boot/boot.ld \
 	dd if=$$BD/kernel.bin of=$@ bs=512 seek=$$KLBA conv=notrunc status=none; \
 	echo "os.img ready: boot@0 setup@1($$S2S s) kernel@$$KLBA($$KS s)"
 
-# Run targets
+# ============================================================================
+# 运行与调试目标
+# ============================================================================
+
 QEMU_ARGS := \
     -drive file=$(BUILD)/os.img,format=raw,index=0,media=disk \
     -m 512M \
@@ -169,8 +197,17 @@ QEMU_ARGS := \
     -no-shutdown \
 	--display sdl
 
+
+QEMU_DEBUG_ARGS := \
+    -drive file=$(BUILD)/os.img,format=raw,index=0,media=disk \
+    -m 512M -smp 4 -vga std -no-reboot -serial stdio -no-shutdown --display sdl \
+    -d int,cpu_reset,guest_errors,unimp -D $(BUILD)/qemu.log
+
 run: $(BUILD)/os.img
 	$(QEMU) $(QEMU_ARGS)
+
+test: $(BUILD)/os.img
+	$(QEMU) $(QEMU_DEBUG_ARGS)
 
 debug: $(BUILD)/os.img
 	$(QEMU) $(QEMU_ARGS) -s -S

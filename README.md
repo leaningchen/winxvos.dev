@@ -142,7 +142,7 @@ make
 - Enables SSE/SSE2
 - Initializes BSP kernel stack
 - Clears BSS section
-- Calls `kernel_main()`
+- Calls `zenith_entrance_main()`
 
 ## Kernel Features
 
