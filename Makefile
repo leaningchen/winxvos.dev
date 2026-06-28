@@ -165,6 +165,7 @@ QEMU_ARGS := \
     -smp 4 \
     -vga vmware \
     -no-reboot \
+	-serial stdio \
     -no-shutdown \
 	--display sdl
 
